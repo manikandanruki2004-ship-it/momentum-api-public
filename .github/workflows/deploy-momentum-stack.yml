@@ -78,66 +78,38 @@ jobs:
             "${AUTH[@]}" \
             "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" \
             > /tmp/d1-list.json
-
-          if ! jq -e '.success == true' /tmp/d1-list.json >/dev/null; then
-            cat /tmp/d1-list.json >&2
-            echo "Cloudflare D1 list failed. Check D1 read/write permission and account ID." >&2
-            exit 1
-          fi
-
+          jq -e '.success == true' /tmp/d1-list.json >/dev/null || { cat /tmp/d1-list.json >&2; exit 1; }
           DB_ID="$(jq -r --arg name "$DB_NAME" '.result[] | select(.name == $name) | .uuid' /tmp/d1-list.json | head -n 1)"
 
           if [ -z "$DB_ID" ]; then
-            echo "D1 database not found; creating $DB_NAME..."
+            echo "Creating D1 database $DB_NAME..."
             curl --fail-with-body --silent --show-error -X POST \
               "${AUTH[@]}" \
               "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" \
               --data "{\"name\":\"${DB_NAME}\"}" \
               > /tmp/d1-create.json
-
-            if ! jq -e '.success == true' /tmp/d1-create.json >/dev/null; then
-              cat /tmp/d1-create.json >&2
-              echo "Cloudflare D1 create failed. Check D1 write permission." >&2
-              exit 1
-            fi
-
+            jq -e '.success == true' /tmp/d1-create.json >/dev/null || { cat /tmp/d1-create.json >&2; exit 1; }
             DB_ID="$(jq -r '.result.uuid // empty' /tmp/d1-create.json)"
           fi
-
-          echo "D1 database ID discovered."
 
           echo "Discovering KV namespace..."
           curl --fail-with-body --silent --show-error \
             "${AUTH[@]}" \
             "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" \
             > /tmp/kv-list.json
-
-          if ! jq -e '.success == true' /tmp/kv-list.json >/dev/null; then
-            cat /tmp/kv-list.json >&2
-            echo "Cloudflare KV list failed. Check KV read/write permission." >&2
-            exit 1
-          fi
-
+          jq -e '.success == true' /tmp/kv-list.json >/dev/null || { cat /tmp/kv-list.json >&2; exit 1; }
           KV_ID="$(jq -r --arg title "$KV_TITLE" '.result[] | select(.title == $title) | .id' /tmp/kv-list.json | head -n 1)"
 
           if [ -z "$KV_ID" ]; then
-            echo "KV namespace not found; creating $KV_TITLE..."
+            echo "Creating KV namespace $KV_TITLE..."
             curl --fail-with-body --silent --show-error -X POST \
               "${AUTH[@]}" \
               "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" \
               --data "{\"title\":\"${KV_TITLE}\"}" \
               > /tmp/kv-create.json
-
-            if ! jq -e '.success == true' /tmp/kv-create.json >/dev/null; then
-              cat /tmp/kv-create.json >&2
-              echo "Cloudflare KV create failed. Check KV write permission." >&2
-              exit 1
-            fi
-
+            jq -e '.success == true' /tmp/kv-create.json >/dev/null || { cat /tmp/kv-create.json >&2; exit 1; }
             KV_ID="$(jq -r '.result.id // empty' /tmp/kv-create.json)"
           fi
-
-          echo "KV namespace ID discovered."
 
           if [ -z "$DB_ID" ] || [ -z "$KV_ID" ]; then
             echo "Unable to provision or discover Cloudflare resource IDs." >&2
@@ -149,6 +121,7 @@ jobs:
           const base = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
           base.d1_databases = [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2], migrations_dir: 'migrations' }];
           base.kv_namespaces = [{ binding: 'RATE_LIMIT', id: process.argv[3] }];
+          base.workers_dev = true;
           fs.writeFileSync('wrangler.deploy.json', JSON.stringify(base, null, 2));
           NODE
 
