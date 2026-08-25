@@ -67,50 +67,77 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          API="https://api.cloudflare.com/client/v4"
           DB_NAME="momentum-production"
           KV_TITLE="momentum-rate-limit"
+          AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json")
 
           echo "Discovering D1 database..."
-          if ! npx wrangler d1 list --json > /tmp/d1-list.json; then
-            echo "Cloudflare D1 list failed. Check CLOUDFLARE_API_TOKEN permissions (D1 Edit) and CLOUDFLARE_ACCOUNT_ID." >&2
+          curl --fail-with-body --silent --show-error \
+            "${AUTH[@]}" \
+            "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" \
+            > /tmp/d1-list.json
+
+          if ! jq -e '.success == true' /tmp/d1-list.json >/dev/null; then
+            cat /tmp/d1-list.json >&2
+            echo "Cloudflare D1 list failed. Check CLOUDFLARE_API_TOKEN D1 Read/Write permission." >&2
             exit 1
           fi
-          DB_ID="$(jq -r --arg name "$DB_NAME" '.[] | select(.name == $name) | (.uuid // .database_id) | select(. != null)' /tmp/d1-list.json | head -n 1)"
+
+          DB_ID="$(jq -r --arg name "$DB_NAME" '.result[] | select(.name == $name) | .uuid' /tmp/d1-list.json | head -n 1)"
 
           if [ -z "$DB_ID" ]; then
             echo "D1 database not found; creating $DB_NAME..."
-            if ! npx wrangler d1 create "$DB_NAME" > /tmp/d1-create.txt 2>&1; then
-              cat /tmp/d1-create.txt >&2
-              echo "Cloudflare D1 create failed. Check CLOUDFLARE_API_TOKEN permissions: D1 Edit is required." >&2
+            curl --fail-with-body --silent --show-error -X POST \
+              "${AUTH[@]}" \
+              "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" \
+              --data "{\"name\":\"${DB_NAME}\"}" \
+              > /tmp/d1-create.json
+
+            if ! jq -e '.success == true' /tmp/d1-create.json >/dev/null; then
+              cat /tmp/d1-create.json >&2
+              echo "Cloudflare D1 create failed. Check CLOUDFLARE_API_TOKEN D1 Write permission." >&2
               exit 1
             fi
-            if ! npx wrangler d1 list --json > /tmp/d1-list-after-create.json; then
-              echo "D1 was created but listing it failed." >&2
-              exit 1
-            fi
-            DB_ID="$(jq -r --arg name "$DB_NAME" '.[] | select(.name == $name) | (.uuid // .database_id) | select(. != null)' /tmp/d1-list-after-create.json | head -n 1)"
+
+            DB_ID="$(jq -r '.result.uuid // empty' /tmp/d1-create.json)"
           fi
 
+          echo "D1 database ID: ${DB_ID}"
+
           echo "Discovering KV namespace..."
-          if ! npx wrangler kv namespace list --json > /tmp/kv-list.json; then
-            echo "Cloudflare KV list failed. Check Workers KV Storage Edit permission." >&2
+          curl --fail-with-body --silent --show-error \
+            "${AUTH[@]}" \
+            "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" \
+            > /tmp/kv-list.json
+
+          if ! jq -e '.success == true' /tmp/kv-list.json >/dev/null; then
+            cat /tmp/kv-list.json >&2
+            echo "Cloudflare KV list failed. Check Workers KV Storage Read/Write permission." >&2
             exit 1
           fi
-          KV_ID="$(jq -r --arg title "$KV_TITLE" '.[] | select(.title == $title) | .id' /tmp/kv-list.json | head -n 1)"
+
+          KV_ID="$(jq -r --arg title "$KV_TITLE" '.result[] | select(.title == $title) | .id' /tmp/kv-list.json | head -n 1)"
 
           if [ -z "$KV_ID" ]; then
             echo "KV namespace not found; creating $KV_TITLE..."
-            if ! npx wrangler kv namespace create "$KV_TITLE" > /tmp/kv-create.txt 2>&1; then
-              cat /tmp/kv-create.txt >&2
-              echo "Cloudflare KV create failed. Check Workers KV Storage Edit permission." >&2
+            curl --fail-with-body --silent --show-error -X POST \
+              "${AUTH[@]}" \
+              "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" \
+              --data "{\"title\":\"${KV_TITLE}\"}" \
+              > /tmp/kv-create.json
+
+            if ! jq -e '.success == true' /tmp/kv-create.json >/dev/null; then
+              cat /tmp/kv-create.json >&2
+              echo "Cloudflare KV create failed. Check Workers KV Storage Write permission." >&2
               exit 1
             fi
-            if ! npx wrangler kv namespace list --json > /tmp/kv-list-after-create.json; then
-              echo "KV namespace was created but listing it failed." >&2
-              exit 1
-            fi
-            KV_ID="$(jq -r --arg title "$KV_TITLE" '.[] | select(.title == $title) | .id' /tmp/kv-list-after-create.json | head -n 1)"
+
+            KV_ID="$(jq -r '.result.id // empty' /tmp/kv-create.json)"
           fi
+
+          echo "KV namespace ID: ${KV_ID}"
 
           if [ -z "$DB_ID" ] || [ -z "$KV_ID" ]; then
             echo "Unable to provision or discover Cloudflare resource IDs." >&2
@@ -120,8 +147,16 @@ jobs:
           node - "$DB_ID" "$KV_ID" <<'NODE'
           const fs = require('fs');
           const base = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
-          base.d1_databases = [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2], migrations_dir: 'migrations' }];
-          base.kv_namespaces = [{ binding: 'RATE_LIMIT', id: process.argv[3] }];
+          base.d1_databases = [{
+            binding: 'DB',
+            database_name: 'momentum-production',
+            database_id: process.argv[2],
+            migrations_dir: 'migrations'
+          }];
+          base.kv_namespaces = [{
+            binding: 'RATE_LIMIT',
+            id: process.argv[3]
+          }];
           fs.writeFileSync('wrangler.deploy.json', JSON.stringify(base, null, 2));
           NODE
 
