@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: momentum-gateway-staging
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      - key: ENGINE_BASE_URL
+        value: http://momentum-engine-staging:8000
+      - key: ENGINE_SHARED_SECRET
+        fromService:
+          type: pserv
+          name: momentum-engine-staging
+          envVarKey: WRAPPER_SHARED_SECRET
