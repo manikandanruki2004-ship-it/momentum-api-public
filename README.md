@@ -1,12 +1,27 @@
 # Momentum API
 
-Public developer-facing repository for Momentum API.
+Public developer-facing gateway for Momentum API.
 
-Momentum ranks GitHub repositories using developer-activity, recency, community, and popularity signals. The commercial engine remains private in `momentum-engine`.
+Momentum ranks GitHub repositories using developer-activity, recency, community, and popularity signals. The proprietary engine lives in the private `momentum-engine` repository.
 
-## Public/private boundary
+## Architecture
 
-This repository contains only the API contract, SDKs, documentation, and examples. It must never contain production secrets, customer records, GitHub tokens, database credentials, or proprietary scoring implementation.
+```text
+Customer
+   |
+   v
+momentum-api-public   (PUBLIC gateway)
+   |
+   | private Render network + shared service secret
+   v
+momentum-engine       (PRIVATE engine)
+   |
+   +--> GitHub API
+   +--> PostgreSQL
+   +--> Render Key Value
+```
+
+The public repository contains only the gateway, API contract, SDKs, docs, and examples. It must never contain production secrets, customer records, GitHub tokens, database credentials, or proprietary scoring implementation.
 
 ## API
 
@@ -47,9 +62,15 @@ print(result["data"])
 
 Responses include repository name, stars, forks, recent activity, momentum score, momentum level, and request metadata.
 
+## Deployment
+
+Deploy `momentum-engine` first so the private Render service `momentum-engine-staging` exists. Then deploy this repository as `momentum-gateway-staging`; its Blueprint reads the engine's generated `WRAPPER_SHARED_SECRET` through Render's private-service wiring.
+
+The public gateway never receives the GitHub token or database credentials. Customer API keys are validated by the private engine.
+
 ## Status
 
-The public contract is ready. Deployment-specific hostnames and pricing are placeholders until the production domain and billing configuration are connected.
+The source and staging deployment definitions are prepared. Production remains blocked until a real domain, production datastore plans, GitHub credential, and billing configuration are supplied.
 
 ## Security
 
