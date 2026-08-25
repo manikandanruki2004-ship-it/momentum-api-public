@@ -79,11 +79,16 @@ jobs:
 
           if [ -z "$DB_ID" ]; then
             echo "D1 database not found; creating $DB_NAME..."
-            if ! npx wrangler d1 create "$DB_NAME" --remote --json > /tmp/d1-create.json; then
+            if ! npx wrangler d1 create "$DB_NAME" > /tmp/d1-create.txt 2>&1; then
+              cat /tmp/d1-create.txt >&2
               echo "Cloudflare D1 create failed. Check CLOUDFLARE_API_TOKEN permissions: D1 Edit is required." >&2
               exit 1
             fi
-            DB_ID="$(jq -r '(.uuid // .database_id // .result.uuid // .result.database_id) // empty' /tmp/d1-create.json)"
+            if ! npx wrangler d1 list --json > /tmp/d1-list-after-create.json; then
+              echo "D1 was created but listing it failed." >&2
+              exit 1
+            fi
+            DB_ID="$(jq -r --arg name "$DB_NAME" '.[] | select(.name == $name) | (.uuid // .database_id) | select(. != null)' /tmp/d1-list-after-create.json | head -n 1)"
           fi
 
           echo "Discovering KV namespace..."
@@ -95,11 +100,16 @@ jobs:
 
           if [ -z "$KV_ID" ]; then
             echo "KV namespace not found; creating $KV_TITLE..."
-            if ! npx wrangler kv namespace create "$KV_TITLE" --json > /tmp/kv-create.json; then
+            if ! npx wrangler kv namespace create "$KV_TITLE" > /tmp/kv-create.txt 2>&1; then
+              cat /tmp/kv-create.txt >&2
               echo "Cloudflare KV create failed. Check Workers KV Storage Edit permission." >&2
               exit 1
             fi
-            KV_ID="$(jq -r '(.id // .result.id) // empty' /tmp/kv-create.json)"
+            if ! npx wrangler kv namespace list --json > /tmp/kv-list-after-create.json; then
+              echo "KV namespace was created but listing it failed." >&2
+              exit 1
+            fi
+            KV_ID="$(jq -r --arg title "$KV_TITLE" '.[] | select(.title == $title) | .id' /tmp/kv-list-after-create.json | head -n 1)"
           fi
 
           if [ -z "$DB_ID" ] || [ -z "$KV_ID" ]; then
