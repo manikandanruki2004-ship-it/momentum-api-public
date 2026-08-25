@@ -81,7 +81,7 @@ jobs:
 
           if ! jq -e '.success == true' /tmp/d1-list.json >/dev/null; then
             cat /tmp/d1-list.json >&2
-            echo "Cloudflare D1 list failed. Check CLOUDFLARE_API_TOKEN D1 Read/Write permission." >&2
+            echo "Cloudflare D1 list failed. Check D1 read/write permission and account ID." >&2
             exit 1
           fi
 
@@ -97,14 +97,14 @@ jobs:
 
             if ! jq -e '.success == true' /tmp/d1-create.json >/dev/null; then
               cat /tmp/d1-create.json >&2
-              echo "Cloudflare D1 create failed. Check CLOUDFLARE_API_TOKEN D1 Write permission." >&2
+              echo "Cloudflare D1 create failed. Check D1 write permission." >&2
               exit 1
             fi
 
             DB_ID="$(jq -r '.result.uuid // empty' /tmp/d1-create.json)"
           fi
 
-          echo "D1 database ID: ${DB_ID}"
+          echo "D1 database ID discovered."
 
           echo "Discovering KV namespace..."
           curl --fail-with-body --silent --show-error \
@@ -114,7 +114,7 @@ jobs:
 
           if ! jq -e '.success == true' /tmp/kv-list.json >/dev/null; then
             cat /tmp/kv-list.json >&2
-            echo "Cloudflare KV list failed. Check Workers KV Storage Read/Write permission." >&2
+            echo "Cloudflare KV list failed. Check KV read/write permission." >&2
             exit 1
           fi
 
@@ -130,14 +130,14 @@ jobs:
 
             if ! jq -e '.success == true' /tmp/kv-create.json >/dev/null; then
               cat /tmp/kv-create.json >&2
-              echo "Cloudflare KV create failed. Check Workers KV Storage Write permission." >&2
+              echo "Cloudflare KV create failed. Check KV write permission." >&2
               exit 1
             fi
 
             KV_ID="$(jq -r '.result.id // empty' /tmp/kv-create.json)"
           fi
 
-          echo "KV namespace ID: ${KV_ID}"
+          echo "KV namespace ID discovered."
 
           if [ -z "$DB_ID" ] || [ -z "$KV_ID" ]; then
             echo "Unable to provision or discover Cloudflare resource IDs." >&2
@@ -147,16 +147,8 @@ jobs:
           node - "$DB_ID" "$KV_ID" <<'NODE'
           const fs = require('fs');
           const base = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
-          base.d1_databases = [{
-            binding: 'DB',
-            database_name: 'momentum-production',
-            database_id: process.argv[2],
-            migrations_dir: 'migrations'
-          }];
-          base.kv_namespaces = [{
-            binding: 'RATE_LIMIT',
-            id: process.argv[3]
-          }];
+          base.d1_databases = [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2], migrations_dir: 'migrations' }];
+          base.kv_namespaces = [{ binding: 'RATE_LIMIT', id: process.argv[3] }];
           fs.writeFileSync('wrangler.deploy.json', JSON.stringify(base, null, 2));
           NODE
 
@@ -165,7 +157,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: _private-engine/worker
-        run: npx wrangler d1 migrations apply momentum-production --remote --yes --config wrangler.deploy.json
+        run: npx wrangler d1 migrations apply momentum-production --remote --config wrangler.deploy.json
 
       - name: Deploy private engine
         env:
