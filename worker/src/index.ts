@@ -32,7 +32,7 @@ export default {
     }
 
     if (url.pathname === "/version") {
-      return json({ name: "Momentum API", version: "1.2.3", engine: "1.2.3" }, 200, { "x-request-id": id });
+      return json({ name: "Momentum API", version: "1.2.4", engine: "1.2.4" }, 200, { "x-request-id": id });
     }
 
     if (!url.pathname.startsWith("/v1/")) {
@@ -56,4 +56,4 @@ export default {
   },
 };
 
-// Release 1.2.3: background activity cache with live fallback reduces GitHub calls on customer requests.
+// Release 1.2.4: 60-second Cloudflare query cache for repeated authorized requests; auth, quota and rate limiting remain uncached.
