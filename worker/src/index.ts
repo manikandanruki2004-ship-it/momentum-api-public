@@ -55,3 +55,5 @@ export default {
     }
   },
 };
+
+// Release 1.2.1: atomic D1-backed per-customer rate limiting is deployed by the canonical stack workflow.
