@@ -32,7 +32,7 @@ export default {
     }
 
     if (url.pathname === "/version") {
-      return json({ name: "Momentum API", version: "1.2.0", engine: "1.2.0" }, 200, { "x-request-id": id });
+      return json({ name: "Momentum API", version: "1.2.1", engine: "1.2.1" }, 200, { "x-request-id": id });
     }
 
     if (!url.pathname.startsWith("/v1/")) {
