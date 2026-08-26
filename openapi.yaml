@@ -1,0 +1,214 @@
+openapi: 3.1.0
+info:
+  title: Momentum API
+  version: 1.2.4
+  description: >-
+    Ranks GitHub repositories using developer activity, recency, community,
+    popularity, and historical star-growth signals.
+servers:
+  - url: https://momentum-api-public.manikandanruki2004.workers.dev
+security:
+  - ApiKeyAuth: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, engine]
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: momentum-api-public }
+                  engine: { type: string, example: service-binding }
+  /version:
+    get:
+      security: []
+      summary: API version
+      responses:
+        '200':
+          description: Version information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+  /v1/momentum:
+    get:
+      summary: Rank GitHub repositories by momentum
+      parameters:
+        - $ref: '#/components/parameters/Language'
+        - $ref: '#/components/parameters/MinStars'
+        - $ref: '#/components/parameters/MaxAgeDays'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ranked repositories
+          headers:
+            X-Request-Id:
+              schema: { type: string }
+            X-API-Version:
+              schema: { type: string, example: v1.2.4 }
+            X-Query-Cache:
+              schema: { type: string, enum: [hit, miss] }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MomentumResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateOrQuotaExceeded'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Customer API key. Authorization: Bearer is also accepted.
+  parameters:
+    Language:
+      name: language
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Optional GitHub language filter.
+    MinStars:
+      name: min_stars
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 1000000
+        default: 100
+    MaxAgeDays:
+      name: max_age_days
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 36500
+        default: 3650
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 8
+        default: 5
+  schemas:
+    MomentumResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MomentumRepository'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    MomentumRepository:
+      type: object
+      required:
+        - repository
+        - stars
+        - forks
+        - commits_28d
+        - commits_28d_capped
+        - momentum_score
+        - momentum_level
+        - momentum_data_status
+      properties:
+        repository: { type: string, example: anthropics/skills }
+        stars: { type: integer, minimum: 0 }
+        forks: { type: integer, minimum: 0 }
+        commits_28d: { type: integer, minimum: 0, maximum: 500 }
+        commits_28d_capped: { type: boolean }
+        stars_7d: { type: [integer, 'null'] }
+        stars_28d: { type: [integer, 'null'] }
+        star_velocity_7d: { type: [number, 'null'] }
+        star_velocity_28d: { type: [number, 'null'] }
+        star_growth_rate_7d: { type: [number, 'null'] }
+        snapshot_7d_at: { type: [string, 'null'], format: date-time }
+        snapshot_28d_at: { type: [string, 'null'], format: date-time }
+        momentum_score: { type: number, minimum: 0, maximum: 100 }
+        momentum_level:
+          type: string
+          enum: [low, medium, high]
+        momentum_data_status:
+          type: string
+          enum: [warming_up, historical]
+    Meta:
+      type: object
+      required:
+        - count
+        - tier
+        - request_id
+        - activity_window_days
+        - star_velocity_windows_days
+        - commit_count_cap
+        - result_limit_cap
+        - activity_source
+        - query_cache
+      properties:
+        count: { type: integer, minimum: 0, maximum: 8 }
+        tier: { type: string }
+        request_id: { type: string }
+        activity_window_days: { type: integer, example: 28 }
+        star_velocity_windows_days:
+          type: array
+          items: { type: integer }
+          example: [7, 28]
+        commit_count_cap: { type: integer, example: 500 }
+        result_limit_cap: { type: integer, example: 8 }
+        activity_source:
+          type: string
+          example: background_cache_with_live_fallback
+        query_cache:
+          type: string
+          enum: [hit, miss]
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string }
+    VersionResponse:
+      type: object
+      required: [name, version, engine]
+      properties:
+        name: { type: string, example: Momentum API }
+        version: { type: string, example: 1.2.4 }
+        engine: { type: string, example: 1.2.4 }
+  responses:
+    Unauthorized:
+      description: API key missing or invalid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    RateOrQuotaExceeded:
+      description: Rate limit or monthly quota exceeded
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UpstreamError:
+      description: GitHub upstream unavailable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
