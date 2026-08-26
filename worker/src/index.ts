@@ -32,7 +32,7 @@ export default {
     }
 
     if (url.pathname === "/version") {
-      return json({ name: "Momentum API", version: "1.2.1", engine: "1.2.1" }, 200, { "x-request-id": id });
+      return json({ name: "Momentum API", version: "1.2.2", engine: "1.2.2" }, 200, { "x-request-id": id });
     }
 
     if (!url.pathname.startsWith("/v1/")) {
@@ -56,4 +56,4 @@ export default {
   },
 };
 
-// Release 1.2.1: atomic D1-backed per-customer rate limiting is deployed by the canonical stack workflow.
+// Release 1.2.2: parallel commit analysis and bounded GitHub pagination are deployed by the canonical stack workflow.
