@@ -8,9 +8,11 @@ import httpx
 
 @dataclass
 class MomentumClient:
+    """Minimal synchronous client for Momentum API v1."""
+
     api_key: str
-    base_url: str = "https://api.yourdomain.com"
-    timeout: float = 20.0
+    base_url: str = "https://momentum-api-public.manikandanruki2004.workers.dev"
+    timeout: float = 30.0
 
     def momentum(
         self,
@@ -18,15 +20,24 @@ class MomentumClient:
         language: str | None = None,
         min_stars: int = 100,
         max_age_days: int = 3650,
-        limit: int = 10,
+        limit: int = 5,
     ) -> dict[str, Any]:
-        params = {
-            "language": language,
+        """Return repositories ranked by Momentum score."""
+        if not 0 <= min_stars <= 1_000_000:
+            raise ValueError("min_stars must be between 0 and 1_000_000")
+        if not 1 <= max_age_days <= 36_500:
+            raise ValueError("max_age_days must be between 1 and 36,500")
+        if not 1 <= limit <= 8:
+            raise ValueError("limit must be between 1 and 8")
+
+        params: dict[str, Any] = {
             "min_stars": min_stars,
             "max_age_days": max_age_days,
             "limit": limit,
         }
-        params = {k: v for k, v in params.items() if v is not None}
+        if language:
+            params["language"] = language
+
         with httpx.Client(timeout=self.timeout) as client:
             response = client.get(
                 f"{self.base_url.rstrip('/')}/v1/momentum",
