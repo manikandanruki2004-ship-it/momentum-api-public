@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Momentum API
-  version: 1.2.8
+  version: 1.3.0
   description: >-
     Ranks GitHub repositories using developer activity, recency, community,
     popularity, and historical star-growth signals.
@@ -41,9 +41,9 @@ paths:
     get:
       summary: Rank GitHub repositories by momentum
       description: >-
-        The public parameter accepts a limit from 1 to 8. The effective maximum
+        The public parameter accepts a limit from 1 to 20. The effective maximum
         is additionally constrained by the authenticated customer's plan.
-        Free returns at most 3, Starter at most 5, and Pro at most 8.
+        Free returns at most 5, Starter at most 10, and Pro at most 20.
       parameters:
         - $ref: '#/components/parameters/Language'
         - $ref: '#/components/parameters/MinStars'
@@ -56,7 +56,7 @@ paths:
             X-Request-Id:
               schema: { type: string }
             X-API-Version:
-              schema: { type: string, example: v1.2.8 }
+              schema: { type: string, example: v1.3.0 }
             X-Query-Cache:
               schema: { type: string, enum: [hit, miss] }
           content:
@@ -109,7 +109,7 @@ components:
       schema:
         type: integer
         minimum: 1
-        maximum: 8
+        maximum: 20
         default: 5
       description: Requested result count; the authenticated plan may impose a lower cap.
   schemas:
@@ -167,7 +167,7 @@ components:
         - activity_source
         - query_cache
       properties:
-        count: { type: integer, minimum: 0, maximum: 8 }
+        count: { type: integer, minimum: 0, maximum: 20 }
         tier: { type: string, enum: [free, starter, pro] }
         request_id: { type: string }
         activity_window_days: { type: integer, example: 28 }
@@ -176,7 +176,7 @@ components:
           items: { type: integer }
           example: [7, 28]
         commit_count_cap: { type: integer, example: 500 }
-        result_limit_cap: { type: integer, minimum: 1, maximum: 8, example: 3 }
+        result_limit_cap: { type: integer, minimum: 1, maximum: 20, example: 5 }
         activity_source:
           type: string
           example: background_cache_with_live_fallback
@@ -199,8 +199,8 @@ components:
       required: [name, version, engine]
       properties:
         name: { type: string, example: Momentum API }
-        version: { type: string, example: 1.2.8 }
-        engine: { type: string, example: 1.2.8 }
+        version: { type: string, example: 1.3.0 }
+        engine: { type: string, example: 1.3.0 }
   responses:
     Unauthorized:
       description: API key missing or invalid
