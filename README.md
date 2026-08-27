@@ -4,7 +4,7 @@ Momentum is a developer-facing API that ranks GitHub repositories by momentum si
 
 The API is deliberately split into two repositories:
 
-- **`momentum-api-public`** — public gateway, API contract, SDKs, docs, and examples.
+- **`momentum-api-public`** — public gateway, API contract, SDKs, docs, demo, and examples.
 - **`momentum-engine`** — private scoring, customer records, quotas, rate limiting, GitHub credentials, and D1 data.
 
 The public repository must never contain production secrets, customer records, GitHub tokens, database credentials, or proprietary scoring implementation.
@@ -52,7 +52,7 @@ Query parameters:
 |---|---|---:|---:|---|
 | `language` | string | empty | — | Optional GitHub language filter |
 | `min_stars` | integer | `100` | `0..1000000` | Minimum repository star count |
-| `max_age_days` | integer | `3650` | `1..36500` | Minimum repository age window used in GitHub search |
+| `max_age_days` | integer | `3650` | `1..36500` | Maximum repository age filter used in GitHub search |
 | `limit` | integer | `5` | `1..8` | Number of repositories returned |
 
 The live API currently caps results at **8 per request**.
@@ -108,9 +108,13 @@ The live API currently caps results at **8 per request**.
 
 Errors include a `request_id` to make troubleshooting and support easier.
 
-## SDK
+## Quickstart
 
-Python SDK example:
+See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) for PowerShell, cURL, Python, JavaScript, parameter ranges, and security guidance.
+
+## SDKs
+
+### Python
 
 ```python
 from sdk.python import MomentumClient
@@ -120,7 +124,25 @@ result = client.momentum(language="python", min_stars=100, limit=8)
 print(result["data"])
 ```
 
-The SDK is intentionally small and uses the public HTTP contract. See `openapi.yaml` for the canonical API description.
+### JavaScript / TypeScript
+
+```javascript
+import { MomentumClient } from "./sdk/javascript/index.js";
+
+const client = new MomentumClient({ apiKey: process.env.MOMENTUM_API_KEY });
+const result = await client.momentum({ language: "python", minStars: 100, limit: 5 });
+console.log(result.data);
+```
+
+Both SDKs validate the production parameter limits before making a request. See `openapi.yaml` for the canonical API description.
+
+## Interactive demo
+
+Try the hosted demo:
+
+https://manikandanruki2004-ship-it.github.io/momentum-api-public/
+
+The demo has a sample mode and an optional live mode. Do not embed a production API key in the public site.
 
 ## Architecture
 
@@ -154,6 +176,10 @@ Customer requests enforce authentication, atomic per-customer rate limiting, and
 The engine stores repository snapshots for historical comparisons and maintains a short-lived activity cache. The API can use the background cache and falls back to live GitHub commit counting when cached activity is unavailable.
 
 A commit count is capped at 500 to bound upstream usage. `commits_28d_capped: true` means the actual count may be at least 500.
+
+## Pricing
+
+See [`PRICING.md`](PRICING.md). The published pricing document is currently a product-design draft; validate demand and operating costs before charging customers.
 
 ## Security
 
