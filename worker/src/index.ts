@@ -42,7 +42,7 @@ export default {
 
     if (url.pathname === "/version") {
       if (request.method !== "GET") return json({ error: { code: "METHOD_NOT_ALLOWED", message: "GET required", request_id: id } }, 405, { "allow": "GET, OPTIONS", "x-request-id": id });
-      return json({ name: "Momentum API", version: "1.2.5", engine: "1.2.5" }, 200, { "x-request-id": id });
+      return json({ name: "Momentum API", version: "1.3.0", engine: "1.3.0" }, 200, { "x-request-id": id });
     }
 
     if (!url.pathname.startsWith("/v1/") && !isCustomerProvisioning) {
@@ -70,5 +70,4 @@ export default {
   },
 };
 
-// Release 1.2.7: fix TypeScript method narrowing while preserving protected customer provisioning proxy.
-// Redeploy marker: apply centralized D1 plan configuration before billing integration.
+// Release 1.3.0: plan-based result caps are enforced by the private engine: Free=5, Starter=10, Pro=20.
