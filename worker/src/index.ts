@@ -51,7 +51,11 @@ export default {
 
     const headers = new Headers(request.headers);
     headers.set("x-request-id", id);
-    const upstreamRequest = new Request(url.toString(), { method: request.method, headers, body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body });
+    const upstreamRequest = new Request(url.toString(), {
+      method: request.method,
+      headers,
+      body: request.method === "GET" ? undefined : request.body,
+    });
 
     try {
       const response = await env.ENGINE.fetch(upstreamRequest);
@@ -66,4 +70,4 @@ export default {
   },
 };
 
-// Release 1.2.6: keep the public gateway GET-only for normal API traffic while proxying the protected /internal/customers POST route.
+// Release 1.2.7: fix TypeScript method narrowing while preserving protected customer provisioning proxy.
