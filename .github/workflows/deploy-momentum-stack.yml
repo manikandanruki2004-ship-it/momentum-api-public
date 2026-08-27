@@ -29,7 +29,7 @@ jobs:
       - name: Checkout private engine
         uses: actions/checkout@v4
         with:
-          repository: manikandanruki2004-ship-it/momentum-engine
+          repository: therandomhuman-hub/momentum-engine
           token: ${{ secrets.MOMENTUM_GITHUB_TOKEN }}
           path: _private-engine
           persist-credentials: false
