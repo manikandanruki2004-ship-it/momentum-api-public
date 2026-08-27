@@ -108,6 +108,19 @@ The live API currently caps results at **8 per request**.
 
 Errors include a `request_id` to make troubleshooting and support easier.
 
+## Plans
+
+Plan limits are centrally defined in the private engine's D1 `plans` table and enforced when customers are created or their tier changes.
+
+| Tier | Requests / month | Rate limit | Results / request |
+|---|---:|---:|---:|
+| Free | 100 | 10/min | 8 |
+| Starter | 5,000 | 30/min | 8 |
+| Pro | 50,000 | 120/min | 8 |
+| Business | 500,000 | 300/min | 8 |
+
+These are the current launch configuration. Pricing and commercial terms remain separate from enforcement configuration.
+
 ## Quickstart
 
 See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) for PowerShell, cURL, Python, JavaScript, parameter ranges, and security guidance.
@@ -140,7 +153,7 @@ Both SDKs validate the production parameter limits before making a request. See 
 
 Try the hosted demo:
 
-https://manikandanruki2004-ship-it.github.io/momentum-api-public/
+https://therandomhuman-hub.github.io/momentum-api-public/
 
 The demo has a sample mode and an optional live mode. Do not embed a production API key in the public site.
 
@@ -179,7 +192,7 @@ A commit count is capped at 500 to bound upstream usage. `commits_28d_capped: tr
 
 ## Pricing
 
-See [`PRICING.md`](PRICING.md). The published pricing document is currently a product-design draft; validate demand and operating costs before charging customers.
+See [`PRICING.md`](PRICING.md). Published pricing remains a product-design draft until billing is enabled.
 
 ## Security
 
