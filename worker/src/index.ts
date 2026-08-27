@@ -71,3 +71,4 @@ export default {
 };
 
 // Release 1.2.7: fix TypeScript method narrowing while preserving protected customer provisioning proxy.
+// Redeploy marker: apply centralized D1 plan configuration before billing integration.
