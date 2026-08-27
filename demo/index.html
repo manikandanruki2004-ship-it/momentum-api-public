@@ -55,12 +55,13 @@
       ["donnemartin/system-design-primer",366100,0,35,"low"],
       ["AUTOMATIC1111/stable-diffusion-webui",164700,0,35,"low"]
     ];
+    const sampleObjects = sample.map(([repository,stars,commits_28d,momentum_score,momentum_level]) => ({repository,stars,commits_28d,momentum_score,momentum_level}));
     const rows = document.getElementById("rows");
     const status = document.getElementById("status");
     const esc = s => String(s).replace(/[&<>\"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
-    function render(data){rows.innerHTML = data.map(r => `<tr><td class="repo">${esc(r.repository)}</td><td>${Number(r.stars).toLocaleString()}</td><td>${esc(r.commits_28d)}</td><td class="score">${Number(r.momentum_score).toFixed(2)}</td><td class="${esc(r.momentum_level)}">${esc(r.momentum_level)}</td></tr>`).join("");}
+    function render(data){rows.innerHTML = data.map(r => `<tr><td class="repo">${esc(r.repository ?? "—")}</td><td>${Number.isFinite(Number(r.stars)) ? Number(r.stars).toLocaleString() : "—"}</td><td>${esc(r.commits_28d ?? "—")}</td><td class="score">${Number.isFinite(Number(r.momentum_score)) ? Number(r.momentum_score).toFixed(2) : "—"}</td><td class="${esc(r.momentum_level ?? "low")}">${esc(r.momentum_level ?? "unknown")}</td></tr>`).join("");}
     function params(){return new URLSearchParams({language:document.getElementById("language").value.trim(),min_stars:document.getElementById("minStars").value,max_age_days:document.getElementById("maxAge").value,limit:document.getElementById("limit").value});}
-    document.getElementById("run").onclick = () => { render(sample.slice(0,Number(document.getElementById("limit").value)).map(([repository,stars,commits_28d,momentum_score,momentum_level]) => ({repository,stars,commits_28d,momentum_score,momentum_level}))); status.textContent = "Sample preview. Run live with your API key to query the production API."; };
+    document.getElementById("run").onclick = () => { render(sampleObjects.slice(0,Number(document.getElementById("limit").value))); status.textContent = "Sample preview. Run live with your API key to query the production API."; };
     document.getElementById("live").onclick = async () => {
       const key = document.getElementById("apiKey").value.trim();
       if(!key){status.textContent="Enter an API key to run a live request.";return;}
@@ -73,7 +74,8 @@
         status.textContent = `Live result: ${payload.data?.length || 0} repositories · cache ${payload.meta?.query_cache || "unknown"}.`;
       }catch(err){status.textContent = `Live request failed: ${err.message}`;}
     };
-    render(sample);
+    render(sampleObjects);
+    status.textContent = "Sample preview. Run live with your API key to query the production API.";
   </script>
 </body>
 </html>
