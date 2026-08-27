@@ -1,0 +1,10 @@
+{
+  "name": "@momentum-api/client",
+  "version": "0.1.0",
+  "description": "Tiny JavaScript client for Momentum API v1",
+  "type": "module",
+  "exports": "./index.js",
+  "engines": {
+    "node": ">=18"
+  }
+}
