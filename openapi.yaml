@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Momentum API
-  version: 1.3.0
+  version: 1.3.1
   description: >-
     Ranks GitHub repositories using developer activity, recency, community,
     popularity, and historical star-growth signals.
@@ -37,6 +37,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VersionResponse'
+  /v1/me:
+    get:
+      summary: Get authenticated customer account and usage summary
+      description: >-
+        Returns the authenticated customer's plan, effective result cap,
+        monthly usage, remaining monthly quota, and aggregate usage metrics.
+        API keys are never returned by this endpoint.
+      responses:
+        '200':
+          description: Account and usage summary
+          headers:
+            X-Request-Id:
+              schema: { type: string }
+            X-API-Version:
+              schema: { type: string, example: v1.3.1 }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/momentum:
     get:
       summary: Rank GitHub repositories by momentum
@@ -183,6 +204,37 @@ components:
         query_cache:
           type: string
           enum: [hit, miss]
+    AccountResponse:
+      type: object
+      required: [customer, plan, usage]
+      properties:
+        customer:
+          type: object
+          required: [id, name, tier, active, api_key_prefix]
+          properties:
+            id: { type: string, example: cus_123 }
+            name: { type: string, example: My App }
+            tier: { type: string, enum: [free, starter, pro] }
+            active: { type: boolean }
+            api_key_prefix: { type: [string, 'null'], example: mk_live_AbCdEfGh }
+        plan:
+          type: object
+          required: [monthly_quota, monthly_usage, remaining_requests, rate_limit_per_minute, max_results, usage_month]
+          properties:
+            monthly_quota: { type: integer, minimum: 0 }
+            monthly_usage: { type: integer, minimum: 0 }
+            remaining_requests: { type: integer, minimum: 0 }
+            rate_limit_per_minute: { type: integer, minimum: 1 }
+            max_results: { type: integer, minimum: 1, maximum: 20 }
+            usage_month: { type: string, pattern: '^\\d{4}-\\d{2}$', example: '2026-08' }
+        usage:
+          type: object
+          required: [requests, successful, failed, average_latency_ms]
+          properties:
+            requests: { type: integer, minimum: 0 }
+            successful: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
+            average_latency_ms: { type: number, minimum: 0 }
     ErrorResponse:
       type: object
       required: [error]
@@ -199,8 +251,8 @@ components:
       required: [name, version, engine]
       properties:
         name: { type: string, example: Momentum API }
-        version: { type: string, example: 1.3.0 }
-        engine: { type: string, example: 1.3.0 }
+        version: { type: string, example: 1.3.1 }
+        engine: { type: string, example: 1.3.1 }
   responses:
     Unauthorized:
       description: API key missing or invalid
