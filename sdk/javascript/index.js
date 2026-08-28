@@ -17,8 +17,8 @@ export class MomentumClient {
     if (!Number.isInteger(maxAgeDays) || maxAgeDays < 1 || maxAgeDays > 36500) {
       throw new Error("maxAgeDays must be an integer between 1 and 36,500");
     }
-    if (!Number.isInteger(limit) || limit < 1 || limit > 8) {
-      throw new Error("limit must be an integer between 1 and 8");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new Error("limit must be an integer between 1 and 20");
     }
 
     const params = new URLSearchParams({
