@@ -63,16 +63,35 @@ function planForEvent(env: Env, planId: string): "starter" | "pro" | null {
   return null;
 }
 
-function shouldActivate(eventType: string): boolean {
+function isSubscriptionEvent(eventType: string): boolean {
+  return eventType.startsWith("subscription.");
+}
+
+function isActivationEvent(eventType: string): boolean {
   return eventType === "subscription.activated" || eventType === "subscription.resumed";
 }
 
-function shouldDeactivate(eventType: string): boolean {
-  return eventType === "subscription.halted" || eventType === "subscription.cancelled" || eventType === "subscription.completed" || eventType === "subscription.paused";
+function isRenewalEvent(eventType: string): boolean {
+  return eventType === "subscription.charged";
+}
+
+function isPauseEvent(eventType: string): boolean {
+  return eventType === "subscription.paused";
+}
+
+function isFreeDowngradeEvent(eventType: string): boolean {
+  return eventType === "subscription.halted" || eventType === "subscription.cancelled" || eventType === "subscription.completed";
 }
 
 async function processEvent(env: Env, eventId: string, event: SubscriptionEvent): Promise<void> {
   const eventType = String(event.event ?? "unknown");
+  if (!isSubscriptionEvent(eventType)) {
+    await env.DB.prepare(
+      `UPDATE razorpay_webhook_events SET status='ignored', processed_at=? WHERE event_id=?`,
+    ).bind(new Date().toISOString(), eventId).run();
+    return;
+  }
+
   const subscription = event.payload?.subscription?.entity;
   if (!subscription?.id) throw new Error("Missing subscription entity id");
 
@@ -89,11 +108,17 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   const customerId = existing?.customer_id ?? notedCustomerId;
   if (!customerId) throw new Error("Missing momentum_customer_id mapping");
 
+  const mappedTier = planForEvent(env, planId);
   let tier: "free" | "starter" | "pro" | null = null;
-  if (shouldActivate(eventType)) tier = planForEvent(env, planId);
-  if (shouldDeactivate(eventType)) tier = "free";
-  if (shouldActivate(eventType) && !tier) throw new Error("Unknown Razorpay plan id");
-  if (!tier && existing && ["starter", "pro", "free"].includes(existing.tier)) tier = existing.tier as "free" | "starter" | "pro";
+  if (isActivationEvent(eventType) || isRenewalEvent(eventType) || eventType === "subscription.updated") {
+    tier = mappedTier ?? (existing && ["starter", "pro", "free"].includes(existing.tier) ? existing.tier as "starter" | "pro" | "free" : null);
+  }
+  if (isFreeDowngradeEvent(eventType)) tier = "free";
+  if (isPauseEvent(eventType)) tier = existing && ["starter", "pro", "free"].includes(existing.tier) ? existing.tier as "starter" | "pro" | "free" : mappedTier;
+
+  if ((isActivationEvent(eventType) || eventType === "subscription.updated") && !tier) {
+    throw new Error("Unknown Razorpay plan id");
+  }
 
   const now = new Date().toISOString();
   const storedTier = tier ?? "unknown";
@@ -126,14 +151,17 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
     now,
   ).run();
 
-  if (shouldActivate(eventType) || shouldDeactivate(eventType)) {
+  if (isActivationEvent(eventType) || isRenewalEvent(eventType) || eventType === "subscription.updated" || isFreeDowngradeEvent(eventType)) {
     await env.DB.prepare(
       `UPDATE customers
        SET tier = ?,
            monthly_quota = (SELECT monthly_quota FROM plans WHERE tier = ? AND active = 1),
-           rate_limit_per_minute = (SELECT rate_limit_per_minute FROM plans WHERE tier = ? AND active = 1)
-       WHERE id = ? AND active = 1`,
+           rate_limit_per_minute = (SELECT rate_limit_per_minute FROM plans WHERE tier = ? AND active = 1),
+           active = 1
+       WHERE id = ?`,
     ).bind(tier, tier, tier, customerId).run();
+  } else if (isPauseEvent(eventType)) {
+    await env.DB.prepare(`UPDATE customers SET active = 0 WHERE id = ?`).bind(customerId).run();
   }
 
   await env.DB.prepare(
