@@ -182,4 +182,9 @@ jobs:
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/version" | tee /tmp/version.json
           jq -e '.name == "Momentum API"' /tmp/version.json >/dev/null
 
+          echo "Checking /v1/me route protection..."
+          ME_STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/v1/me")"
+          test "$ME_STATUS" = "401"
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
+
           echo "Public gateway smoke checks passed."
