@@ -27,8 +27,8 @@ class MomentumClient:
             raise ValueError("min_stars must be between 0 and 1_000_000")
         if not 1 <= max_age_days <= 36_500:
             raise ValueError("max_age_days must be between 1 and 36,500")
-        if not 1 <= limit <= 8:
-            raise ValueError("limit must be between 1 and 8")
+        if not 1 <= limit <= 20:
+            raise ValueError("limit must be between 1 and 20")
 
         params: dict[str, Any] = {
             "min_stars": min_stars,
