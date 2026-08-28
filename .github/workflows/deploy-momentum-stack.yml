@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'worker/**'
+      - 'billing/**'
+      - 'worker/migrations/**'
       - '.github/workflows/deploy-momentum-stack.yml'
   workflow_dispatch:
     inputs:
@@ -24,7 +26,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout public gateway
@@ -48,10 +50,15 @@ jobs:
           cache: npm
           cache-dependency-path: |
             worker/package.json
+            billing/package.json
             _private-engine/worker/package.json
 
       - name: Install gateway dependencies
         working-directory: worker
+        run: npm install --no-audit --no-fund
+
+      - name: Install billing dependencies
+        working-directory: billing
         run: npm install --no-audit --no-fund
 
       - name: Install engine dependencies
@@ -60,6 +67,10 @@ jobs:
 
       - name: Typecheck gateway
         working-directory: worker
+        run: npm run typecheck
+
+      - name: Typecheck billing
+        working-directory: billing
         run: npm run typecheck
 
       - name: Typecheck engine
@@ -132,6 +143,9 @@ jobs:
           fs.writeFileSync('wrangler.deploy.json', JSON.stringify(base, null, 2));
           NODE
 
+      - name: Sync billing migration into engine checkout
+        run: cp worker/migrations/0008_razorpay_billing.sql _private-engine/worker/migrations/0008_razorpay_billing.sql
+
       - name: Apply engine D1 migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -161,6 +175,73 @@ jobs:
           printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json
           printf '%s' "$MOMENTUM_ADMIN_SECRET" | npx wrangler secret put ADMIN_SECRET --config wrangler.deploy.json
 
+      - name: Create billing Worker config
+        working-directory: billing
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const config = {
+            name: 'momentum-billing',
+            main: 'src/index.ts',
+            compatibility_date: '2026-08-25',
+            workers_dev: true,
+            observability: { enabled: true },
+            d1_databases: [{ binding: 'DB', database_name: 'momentum-production', database_id: process.env.DB_ID_PLACEHOLDER || '', migrations_dir: '../worker/migrations' }]
+          };
+          fs.writeFileSync('wrangler.deploy.json', JSON.stringify(config, null, 2));
+          NODE
+
+      - name: Patch billing Worker config with discovered D1 ID
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: _private-engine/worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4"
+          AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json")
+          curl --fail-with-body --silent --show-error "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" > /tmp/d1-list-again.json
+          DB_ID="$(jq -r --arg name "momentum-production" '.result[] | select(.name == $name) | .uuid' /tmp/d1-list-again.json | head -n 1)"
+          test -n "$DB_ID"
+          cd ../../../billing
+          node - "$DB_ID" <<'NODE'
+          const fs = require('fs');
+          const p = JSON.parse(fs.readFileSync('wrangler.deploy.json','utf8'));
+          p.d1_databases[0].database_id = process.argv[2];
+          fs.writeFileSync('wrangler.deploy.json', JSON.stringify(p, null, 2));
+          NODE
+
+      - name: Deploy billing Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: billing
+        run: npx wrangler deploy --config wrangler.deploy.json
+
+      - name: Install billing Worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_STARTER_PLAN_ID: ${{ secrets.RAZORPAY_STARTER_PLAN_ID }}
+          RAZORPAY_PRO_PLAN_ID: ${{ secrets.RAZORPAY_PRO_PLAN_ID }}
+        working-directory: billing
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then
+            printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json
+          else
+            echo "RAZORPAY_WEBHOOK_SECRET is not configured yet; billing webhook remains disabled."
+          fi
+          if [ -n "$RAZORPAY_STARTER_PLAN_ID" ]; then
+            printf '%s' "$RAZORPAY_STARTER_PLAN_ID" | npx wrangler secret put RAZORPAY_STARTER_PLAN_ID --config wrangler.deploy.json
+          fi
+          if [ -n "$RAZORPAY_PRO_PLAN_ID" ]; then
+            printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json
+          fi
+
       - name: Deploy public gateway
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -187,4 +268,8 @@ jobs:
           test "$ME_STATUS" = "401"
           jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
 
-          echo "Public gateway smoke checks passed."
+          echo "Checking Razorpay webhook endpoint is reachable..."
+          BILLING_STATUS="$(curl --silent --show-error --output /tmp/razorpay.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/webhooks/razorpay" -H 'Content-Type: application/json' -d '{}')"
+          test "$BILLING_STATUS" = "401" -o "$BILLING_STATUS" = "503"
+
+          echo "Public gateway and billing route smoke checks passed."
