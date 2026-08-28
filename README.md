@@ -28,13 +28,16 @@ curl "https://momentum-api-public.manikandanruki2004.workers.dev/v1/momentum?lan
 
 Never commit an API key to Git. Treat a `mk_live_...` value as a secret.
 
-## Endpoint
+## Endpoints
 
 ```http
 GET /v1/momentum
+GET /v1/me
 ```
 
-Query parameters:
+`/v1/me` returns the authenticated customer's current plan, effective result cap, monthly usage, remaining quota, and aggregate usage metrics. It never returns the full API key.
+
+## Momentum query parameters
 
 | Parameter | Type | Default | Range | Description |
 |---|---|---:|---:|---|
@@ -94,6 +97,15 @@ The private engine enforces these limits from centralized D1 plan configuration.
 
 `momentum_data_status` is `warming_up` until enough historical snapshots exist to calculate the star-growth signals. The API does not invent missing history.
 
+## Account example
+
+```bash
+curl https://momentum-api-public.manikandanruki2004.workers.dev/v1/me \\
+  -H "X-API-Key: mk_live_..."
+```
+
+See [`docs/ACCOUNT.md`](docs/ACCOUNT.md) for the response schema and usage details.
+
 ## Errors
 
 | Status | Code | Meaning |
@@ -119,7 +131,9 @@ from sdk.python import MomentumClient
 
 client = MomentumClient(api_key="mk_live_...")
 result = client.momentum(language="python", min_stars=100, limit=20)
+account = client.me()
 print(result["data"])
+print(account["plan"])
 ```
 
 ### JavaScript / TypeScript
@@ -129,7 +143,9 @@ import { MomentumClient } from "./sdk/javascript/index.js";
 
 const client = new MomentumClient({ apiKey: process.env.MOMENTUM_API_KEY });
 const result = await client.momentum({ language: "python", minStars: 100, limit: 20 });
+const account = await client.me();
 console.log(result.data);
+console.log(account.plan);
 ```
 
 Both SDKs validate the global API parameter limits before making a request. The server then applies the authenticated customer's plan cap.
