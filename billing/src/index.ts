@@ -168,11 +168,19 @@ async function webhook(request: Request, env: Env, id: string): Promise<Response
   }
 
   const payloadHash = await sha256(rawBody);
+  const eventType = String(event.event ?? "unknown");
   const claim = await env.DB.prepare(
     `INSERT OR IGNORE INTO razorpay_webhook_events(event_id,event_type,status,received_at,payload_sha256) VALUES(?,?,?,?,?)`,
-  ).bind(eventId, String(event.event ?? "unknown"), "received", new Date().toISOString(), payloadHash).run();
+  ).bind(eventId, eventType, "received", new Date().toISOString(), payloadHash).run();
 
-  if (claim.meta.changes !== 1) return json({ status: "ok", duplicate: true, request_id: id }, 200, { "x-request-id": id });
+  if (claim.meta.changes !== 1) {
+    const existing = await env.DB.prepare(`SELECT status FROM razorpay_webhook_events WHERE event_id=? LIMIT 1`).bind(eventId).first<{ status: string }>();
+    if (existing?.status === "failed") {
+      await env.DB.prepare(`UPDATE razorpay_webhook_events SET status='received', error_message=NULL WHERE event_id=?`).bind(eventId).run();
+    } else {
+      return json({ status: "ok", duplicate: true, request_id: id }, 200, { "x-request-id": id });
+    }
+  }
 
   try {
     await processEvent(env, eventId, event);
