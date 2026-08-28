@@ -1,10 +1,11 @@
 interface Env {
   ENGINE: Fetcher;
+  BILLING: Fetcher;
 }
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "content-type,x-api-key,authorization,x-admin-secret",
+  "access-control-allow-headers": "content-type,x-api-key,authorization,x-admin-secret,x-razorpay-signature,x-razorpay-event-id",
   "access-control-allow-methods": "GET,POST,OPTIONS",
 };
 
@@ -27,25 +28,26 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
     const isCustomerProvisioning = url.pathname === "/internal/customers";
-    if (request.method !== "GET" && !(isCustomerProvisioning && request.method === "POST")) {
+    const isRazorpayWebhook = url.pathname === "/webhooks/razorpay";
+    if (request.method !== "GET" && !(isCustomerProvisioning && request.method === "POST") && !(isRazorpayWebhook && request.method === "POST")) {
       return json(
-        { error: { code: "METHOD_NOT_ALLOWED", message: "Only GET is supported except protected customer provisioning", request_id: id } },
+        { error: { code: "METHOD_NOT_ALLOWED", message: "Only GET is supported except protected POST endpoints", request_id: id } },
         405,
-        { "allow": isCustomerProvisioning ? "GET, POST, OPTIONS" : "GET, OPTIONS", "x-request-id": id },
+        { "allow": isCustomerProvisioning || isRazorpayWebhook ? "GET,POST,OPTIONS" : "GET,OPTIONS", "x-request-id": id },
       );
     }
 
     if (url.pathname === "/health") {
       if (request.method !== "GET") return json({ error: { code: "METHOD_NOT_ALLOWED", message: "GET required", request_id: id } }, 405, { "allow": "GET, OPTIONS", "x-request-id": id });
-      return json({ status: "ok", service: "momentum-api-public", engine: "service-binding" }, 200, { "x-request-id": id });
+      return json({ status: "ok", service: "momentum-api-public", engine: "service-binding", billing: "service-binding" }, 200, { "x-request-id": id });
     }
 
     if (url.pathname === "/version") {
       if (request.method !== "GET") return json({ error: { code: "METHOD_NOT_ALLOWED", message: "GET required", request_id: id } }, 405, { "allow": "GET, OPTIONS", "x-request-id": id });
-      return json({ name: "Momentum API", version: "1.3.0", engine: "1.3.0" }, 200, { "x-request-id": id });
+      return json({ name: "Momentum API", version: "1.4.0", engine: "1.3.1", billing: "1.0.0" }, 200, { "x-request-id": id });
     }
 
-    if (!url.pathname.startsWith("/v1/") && !isCustomerProvisioning) {
+    if (!url.pathname.startsWith("/v1/") && !isCustomerProvisioning && !isRazorpayWebhook) {
       return json({ error: { code: "NOT_FOUND", message: "Route not found", request_id: id } }, 404, { "x-request-id": id });
     }
 
@@ -58,16 +60,18 @@ export default {
     });
 
     try {
-      const response = await env.ENGINE.fetch(upstreamRequest);
+      const binding = isRazorpayWebhook ? env.BILLING : env.ENGINE;
+      const response = await binding.fetch(upstreamRequest);
       const outHeaders = new Headers(response.headers);
       outHeaders.set("x-request-id", id);
       for (const [key, value] of Object.entries(corsHeaders)) outHeaders.set(key, value);
       return new Response(response.body, { status: response.status, headers: outHeaders });
     } catch (error) {
-      console.error("engine service binding failed", error);
-      return json({ error: { code: "ENGINE_UNAVAILABLE", message: "Momentum engine unavailable", request_id: id } }, 503, { "x-request-id": id });
+      console.error("service binding failed", error);
+      return json({ error: { code: "UPSTREAM_UNAVAILABLE", message: "Momentum service unavailable", request_id: id } }, 503, { "x-request-id": id });
     }
   },
 };
 
-// Release 1.3.0: plan-based result caps are enforced by the private engine: Free=5, Starter=10, Pro=20.
+// Release 1.4.0: public gateway routes Razorpay webhooks to the dedicated billing Worker.
+// Momentum plan limits remain enforced by the private engine: Free=5, Starter=10, Pro=20.
