@@ -10,29 +10,13 @@ export class MomentumClient {
     this.timeoutMs = timeoutMs;
   }
 
-  async momentum({ language, minStars = 100, maxAgeDays = 3650, limit = 5 } = {}) {
-    if (!Number.isInteger(minStars) || minStars < 0 || minStars > 1000000) {
-      throw new Error("minStars must be an integer between 0 and 1,000,000");
-    }
-    if (!Number.isInteger(maxAgeDays) || maxAgeDays < 1 || maxAgeDays > 36500) {
-      throw new Error("maxAgeDays must be an integer between 1 and 36,500");
-    }
-    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
-      throw new Error("limit must be an integer between 1 and 20");
-    }
-
-    const params = new URLSearchParams({
-      min_stars: String(minStars),
-      max_age_days: String(maxAgeDays),
-      limit: String(limit),
-    });
-    if (language) params.set("language", language);
-
+  async _get(path, query) {
+    const params = query ? `?${new URLSearchParams(query)}` : "";
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await fetch(`${this.baseUrl}/v1/momentum?${params}`, {
+      const response = await fetch(`${this.baseUrl}${path}${params}`, {
         method: "GET",
         headers: { "X-API-Key": this.apiKey },
         signal: controller.signal,
@@ -50,5 +34,29 @@ export class MomentumClient {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async momentum({ language, minStars = 100, maxAgeDays = 3650, limit = 5 } = {}) {
+    if (!Number.isInteger(minStars) || minStars < 0 || minStars > 1000000) {
+      throw new Error("minStars must be an integer between 0 and 1,000,000");
+    }
+    if (!Number.isInteger(maxAgeDays) || maxAgeDays < 1 || maxAgeDays > 36500) {
+      throw new Error("maxAgeDays must be an integer between 1 and 36,500");
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new Error("limit must be an integer between 1 and 20");
+    }
+
+    const params = {
+      min_stars: String(minStars),
+      max_age_days: String(maxAgeDays),
+      limit: String(limit),
+    };
+    if (language) params.language = language;
+    return this._get("/v1/momentum", params);
+  }
+
+  async me() {
+    return this._get("/v1/me");
   }
 }
