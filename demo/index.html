@@ -24,7 +24,7 @@
         <div class="field"><label for="language">Language</label><input id="language" value="python" placeholder="python"></div>
         <div class="field"><label for="minStars">Minimum stars</label><input id="minStars" type="number" min="0" value="100"></div>
         <div class="field"><label for="maxAge">Max repository age</label><input id="maxAge" type="number" min="1" value="3650"></div>
-        <div class="field"><label for="limit">Results</label><select id="limit"><option>5</option><option selected>8</option></select></div>
+        <div class="field"><label for="limit">Results</label><select id="limit"><option selected>5</option><option>10</option><option>20</option></select></div>
         <button class="btn" id="run">Preview</button>
       </div>
 
@@ -61,11 +61,11 @@
     const limitSelect = document.getElementById("limit");
     const esc = s => String(s).replace(/[&<>\"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
     function render(data){rows.innerHTML = data.map(r => `<tr><td class="repo">${esc(r.repository ?? "—")}</td><td>${Number.isFinite(Number(r.stars)) ? Number(r.stars).toLocaleString() : "—"}</td><td>${esc(r.commits_28d ?? "—")}</td><td class="score">${Number.isFinite(Number(r.momentum_score)) ? Number(r.momentum_score).toFixed(2) : "—"}</td><td class="${esc(r.momentum_level ?? "low")}">${esc(r.momentum_level ?? "unknown")}</td></tr>`).join("");}
-    function selectedLimit(){return Math.max(1, Math.min(Number(limitSelect.value) || 8, 8));}
+    function selectedLimit(){return Math.max(1, Math.min(Number(limitSelect.value) || 5, 20));}
     function params(){return new URLSearchParams({language:document.getElementById("language").value.trim(),min_stars:document.getElementById("minStars").value,max_age_days:document.getElementById("maxAge").value,limit:String(selectedLimit())});}
-    function renderSample(){render(sampleObjects.slice(0, selectedLimit()));}
-    document.getElementById("run").onclick = () => { renderSample(); status.textContent = "Sample preview. Run live with your API key to query the production API."; };
-    limitSelect.addEventListener("change", () => { renderSample(); status.textContent = "Sample preview updated to your selected result count."; });
+    function renderSample(){render(sampleObjects.slice(0, Math.min(selectedLimit(), sampleObjects.length)));}
+    document.getElementById("run").onclick = () => { renderSample(); status.textContent = selectedLimit() > sampleObjects.length ? `Sample preview contains ${sampleObjects.length} examples. Run live with your API key for up to ${selectedLimit()} results.` : "Sample preview. Run live with your API key to query the production API."; };
+    limitSelect.addEventListener("change", () => { renderSample(); status.textContent = selectedLimit() > sampleObjects.length ? `Sample preview contains ${sampleObjects.length} examples. Run live for up to ${selectedLimit()} results under your plan.` : "Sample preview updated to your selected result count."; });
     document.getElementById("live").onclick = async () => {
       const key = document.getElementById("apiKey").value.trim();
       if(!key){status.textContent="Enter an API key to run a live request.";return;}
@@ -75,7 +75,7 @@
         const payload = await res.json();
         if(!res.ok) throw new Error(payload?.error?.message || `HTTP ${res.status}`);
         render(payload.data || []);
-        status.textContent = `Live result: ${payload.data?.length || 0} repositories · cache ${payload.meta?.query_cache || "unknown"}.`;
+        status.textContent = `Live result: ${payload.data?.length || 0} repositories · plan ${payload.meta?.tier || "unknown"} · cap ${payload.meta?.result_limit_cap ?? "?"} · cache ${payload.meta?.query_cache || "unknown"}.`;
       }catch(err){status.textContent = `Live request failed: ${err.message}`;}
     };
     renderSample();
