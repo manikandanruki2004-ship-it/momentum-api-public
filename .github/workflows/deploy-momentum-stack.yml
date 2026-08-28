@@ -6,7 +6,13 @@ on:
     paths:
       - 'worker/**'
       - '.github/workflows/deploy-momentum-stack.yml'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      private_engine_ref:
+        description: 'Branch, tag, or commit SHA from momentum-engine to deploy'
+        required: false
+        default: 'main'
+        type: string
 
 permissions:
   contents: read
@@ -31,6 +37,7 @@ jobs:
         with:
           repository: therandomhuman-hub/momentum-engine
           token: ${{ secrets.MOMENTUM_GITHUB_TOKEN }}
+          ref: ${{ inputs.private_engine_ref || 'main' }}
           path: _private-engine
           persist-credentials: false
 
