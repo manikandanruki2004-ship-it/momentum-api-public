@@ -17,24 +17,12 @@ Base URL:
 https://momentum-api-public.manikandanruki2004.workers.dev
 ```
 
-Health check:
-
-```bash
-curl https://momentum-api-public.manikandanruki2004.workers.dev/health
-```
-
-Version:
-
-```bash
-curl https://momentum-api-public.manikandanruki2004.workers.dev/version
-```
-
 ## Authentication
 
-Send the API key with either `X-API-Key` or `Authorization: Bearer`:
+Send the API key with either `X-API-Key` or `Authorization: Bearer`.
 
 ```bash
-curl "https://momentum-api-public.manikandanruki2004.workers.dev/v1/momentum?language=python&min_stars=100&limit=8" \
+curl "https://momentum-api-public.manikandanruki2004.workers.dev/v1/momentum?language=python&min_stars=100&limit=20" \\
   -H "X-API-Key: mk_live_..."
 ```
 
@@ -53,9 +41,19 @@ Query parameters:
 | `language` | string | empty | — | Optional GitHub language filter |
 | `min_stars` | integer | `100` | `0..1000000` | Minimum repository star count |
 | `max_age_days` | integer | `3650` | `1..36500` | Maximum repository age filter used in GitHub search |
-| `limit` | integer | `5` | `1..8` | Number of repositories returned |
+| `limit` | integer | `5` | `1..20` | Requested number of repositories; plan limits may apply |
 
-The live API currently caps results at **8 per request**.
+The effective result cap is determined by the authenticated plan.
+
+## Plans
+
+| Tier | Requests / month | Rate limit | Max results / request |
+|---|---:|---:|---:|
+| Free | 100 | 10/min | **5** |
+| Starter | 5,000 | 30/min | **10** |
+| Pro | 50,000 | 120/min | **20** |
+
+The private engine enforces these limits from centralized D1 plan configuration. Requesting a larger `limit` never bypasses the customer's plan cap.
 
 ## Example response
 
@@ -87,7 +85,7 @@ The live API currently caps results at **8 per request**.
     "activity_window_days": 28,
     "star_velocity_windows_days": [7, 28],
     "commit_count_cap": 500,
-    "result_limit_cap": 8,
+    "result_limit_cap": 5,
     "activity_source": "background_cache_with_live_fallback",
     "query_cache": "miss"
   }
@@ -108,19 +106,6 @@ The live API currently caps results at **8 per request**.
 
 Errors include a `request_id` to make troubleshooting and support easier.
 
-## Plans
-
-Plan limits are centrally defined in the private engine's D1 `plans` table and enforced when customers are created or their tier changes.
-
-| Tier | Requests / month | Rate limit | Results / request |
-|---|---:|---:|---:|
-| Free | 100 | 10/min | 8 |
-| Starter | 5,000 | 30/min | 8 |
-| Pro | 50,000 | 120/min | 8 |
-| Business | 500,000 | 300/min | 8 |
-
-These are the current launch configuration. Pricing and commercial terms remain separate from enforcement configuration.
-
 ## Quickstart
 
 See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) for PowerShell, cURL, Python, JavaScript, parameter ranges, and security guidance.
@@ -133,7 +118,7 @@ See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) for PowerShell, cURL, Python, Jav
 from sdk.python import MomentumClient
 
 client = MomentumClient(api_key="mk_live_...")
-result = client.momentum(language="python", min_stars=100, limit=8)
+result = client.momentum(language="python", min_stars=100, limit=20)
 print(result["data"])
 ```
 
@@ -143,11 +128,11 @@ print(result["data"])
 import { MomentumClient } from "./sdk/javascript/index.js";
 
 const client = new MomentumClient({ apiKey: process.env.MOMENTUM_API_KEY });
-const result = await client.momentum({ language: "python", minStars: 100, limit: 5 });
+const result = await client.momentum({ language: "python", minStars: 100, limit: 20 });
 console.log(result.data);
 ```
 
-Both SDKs validate the production parameter limits before making a request. See `openapi.yaml` for the canonical API description.
+Both SDKs validate the global API parameter limits before making a request. The server then applies the authenticated customer's plan cap.
 
 ## Interactive demo
 
@@ -183,6 +168,10 @@ Background every 6 hours
 ```
 
 Customer requests enforce authentication, atomic per-customer rate limiting, and monthly quota before evaluating the query cache. The query cache is short-lived (60 seconds) and does not bypass customer controls.
+
+## Billing readiness
+
+See [`docs/RAZORPAY_BILLING.md`](docs/RAZORPAY_BILLING.md) for the planned Razorpay subscription flow and webhook security requirements. Payment credentials and webhook secrets belong only in server-side secrets.
 
 ## Data and freshness
 
