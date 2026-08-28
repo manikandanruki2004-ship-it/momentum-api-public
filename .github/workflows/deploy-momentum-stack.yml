@@ -160,3 +160,19 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: worker
         run: npx wrangler deploy
+
+      - name: Smoke test public gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://momentum-api-public.manikandanruki2004.workers.dev"
+
+          echo "Checking /health..."
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/health" | tee /tmp/health.json
+          jq -e '.status == "ok" and .service == "momentum-api-public"' /tmp/health.json >/dev/null
+
+          echo "Checking /version..."
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/version" | tee /tmp/version.json
+          jq -e '.name == "Momentum API"' /tmp/version.json >/dev/null
+
+          echo "Public gateway smoke checks passed."
