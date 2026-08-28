@@ -5,22 +5,20 @@ interface Env {
   RAZORPAY_PRO_PLAN_ID?: string;
 }
 
+type SubscriptionEntity = {
+  id?: string;
+  plan_id?: string;
+  customer_id?: string;
+  status?: string;
+  current_start?: number | null;
+  current_end?: number | null;
+  notes?: Record<string, unknown>;
+};
+
 type SubscriptionEvent = {
   event?: string;
   created_at?: number;
-  payload?: {
-    subscription?: {
-      entity?: {
-        id?: string;
-        plan_id?: string;
-        customer_id?: string;
-        status?: string;
-        current_start?: number | null;
-        current_end?: number | null;
-        notes?: Record<string, unknown>;
-      };
-    };
-  };
+  payload?: { subscription?: { entity?: SubscriptionEntity } };
 };
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) =>
@@ -84,8 +82,8 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   const notes = subscription.notes ?? {};
 
   const existing = await env.DB.prepare(
-    `SELECT customer_id FROM razorpay_subscriptions WHERE subscription_id = ? LIMIT 1`,
-  ).bind(subscriptionId).first<{ customer_id: string }>();
+    `SELECT customer_id, tier FROM razorpay_subscriptions WHERE subscription_id = ? LIMIT 1`,
+  ).bind(subscriptionId).first<{ customer_id: string; tier: string }>();
 
   const notedCustomerId = typeof notes.momentum_customer_id === "string" ? notes.momentum_customer_id : null;
   const customerId = existing?.customer_id ?? notedCustomerId;
@@ -94,11 +92,12 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   let tier: "free" | "starter" | "pro" | null = null;
   if (shouldActivate(eventType)) tier = planForEvent(env, planId);
   if (shouldDeactivate(eventType)) tier = "free";
-
   if (shouldActivate(eventType) && !tier) throw new Error("Unknown Razorpay plan id");
+  if (!tier && existing && ["starter", "pro", "free"].includes(existing.tier)) tier = existing.tier as "free" | "starter" | "pro";
 
-  const currentStatus = String(subscription.status ?? eventType);
   const now = new Date().toISOString();
+  const storedTier = tier ?? "unknown";
+  const currentStatus = String(subscription.status ?? eventType);
 
   await env.DB.prepare(
     `INSERT INTO razorpay_subscriptions(
@@ -119,7 +118,7 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
     customerId,
     razorpayCustomerId,
     planId,
-    tier ?? (shouldDeactivate(eventType) ? "free" : "unknown"),
+    storedTier,
     currentStatus,
     subscription.current_start ?? null,
     subscription.current_end ?? null,
@@ -127,7 +126,7 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
     now,
   ).run();
 
-  if (tier) {
+  if (shouldActivate(eventType) || shouldDeactivate(eventType)) {
     await env.DB.prepare(
       `UPDATE customers
        SET tier = ?,
@@ -138,11 +137,11 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   }
 
   await env.DB.prepare(
-    `UPDATE razorpay_webhook_events SET status = 'processed', processed_at = ? WHERE event_id = ?`,
+    `UPDATE razorpay_webhook_events SET status='processed', processed_at=? WHERE event_id=?`,
   ).bind(now, eventId).run();
 }
 
-async function webhook(request: Request, env: Env, ctx: ExecutionContext, id: string): Promise<Response> {
+async function webhook(request: Request, env: Env, id: string): Promise<Response> {
   const secret = env.RAZORPAY_WEBHOOK_SECRET;
   if (!secret) return json({ error: { code: "BILLING_NOT_CONFIGURED", message: "Razorpay webhook secret is not configured", request_id: id } }, 503, { "x-request-id": id });
 
@@ -154,15 +153,7 @@ async function webhook(request: Request, env: Env, ctx: ExecutionContext, id: st
   if (!signature || !safeEqual(expected, signature)) {
     return json({ error: { code: "INVALID_SIGNATURE", message: "Invalid Razorpay webhook signature", request_id: id } }, 401, { "x-request-id": id });
   }
-  if (!eventId) {
-    return json({ error: { code: "MISSING_EVENT_ID", message: "Missing x-razorpay-event-id header", request_id: id } }, 400, { "x-request-id": id });
-  }
-
-  const payloadHash = await sha256(rawBody);
-  const existing = await env.DB.prepare(
-    `SELECT status FROM razorpay_webhook_events WHERE event_id = ? LIMIT 1`,
-  ).bind(eventId).first<{ status: string }>();
-  if (existing) return json({ status: "ok", duplicate: true, request_id: id }, 200, { "x-request-id": id });
+  if (!eventId) return json({ error: { code: "MISSING_EVENT_ID", message: "Missing x-razorpay-event-id header", request_id: id } }, 400, { "x-request-id": id });
 
   let event: SubscriptionEvent;
   try {
@@ -171,40 +162,46 @@ async function webhook(request: Request, env: Env, ctx: ExecutionContext, id: st
     return json({ error: { code: "INVALID_JSON", message: "Webhook body must be valid JSON", request_id: id } }, 400, { "x-request-id": id });
   }
 
-  const eventType = String(event.event ?? "unknown");
   const createdAt = Number(event.created_at ?? 0);
   if (createdAt > 0 && Math.abs(Date.now() / 1000 - createdAt) > 300) {
     return json({ error: { code: "STALE_EVENT", message: "Webhook event is outside the five-minute replay window", request_id: id } }, 400, { "x-request-id": id });
   }
 
-  const now = new Date().toISOString();
-  await env.DB.prepare(
-    `INSERT INTO razorpay_webhook_events(event_id,event_type,status,received_at,payload_sha256) VALUES(?,?,?,?,?)`,
-  ).bind(eventId, eventType, "received", now, payloadHash).run();
+  const payloadHash = await sha256(rawBody);
+  const claim = await env.DB.prepare(
+    `INSERT OR IGNORE INTO razorpay_webhook_events(event_id,event_type,status,received_at,payload_sha256) VALUES(?,?,?,?,?)`,
+  ).bind(eventId, String(event.event ?? "unknown"), "received", new Date().toISOString(), payloadHash).run();
 
-  ctx.waitUntil((async () => {
-    try {
-      await processEvent(env, eventId, event);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Webhook processing failed";
-      await env.DB.prepare(
-        `UPDATE razorpay_webhook_events SET status='failed', processed_at=?, error_message=? WHERE event_id=?`,
-      ).bind(new Date().toISOString(), message.slice(0, 500), eventId).run();
-      console.error("Razorpay webhook processing failed", { eventId, eventType, message });
-    }
-  })());
+  if (claim.meta.changes !== 1) return json({ status: "ok", duplicate: true, request_id: id }, 200, { "x-request-id": id });
 
-  return json({ status: "accepted", request_id: id }, 200, { "x-request-id": id });
+  try {
+    await processEvent(env, eventId, event);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Webhook processing failed";
+    await env.DB.prepare(
+      `UPDATE razorpay_webhook_events SET status='failed', processed_at=?, error_message=? WHERE event_id=?`,
+    ).bind(new Date().toISOString(), message.slice(0, 500), eventId).run();
+    throw error;
+  }
+
+  return json({ status: "processed", request_id: id }, 200, { "x-request-id": id });
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const id = requestId();
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204 });
     if (url.pathname === "/health" && request.method === "GET") return json({ status: "ok", service: "momentum-billing" }, 200, { "x-request-id": id });
-    if (url.pathname === "/webhooks/razorpay" && request.method === "POST") return webhook(request, env, ctx, id);
+    if (url.pathname === "/webhooks/razorpay" && request.method === "POST") {
+      try {
+        return await webhook(request, env, id);
+      } catch (error) {
+        console.error("Razorpay webhook processing failed", error);
+        return json({ error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing failed; retry the event", request_id: id } }, 500, { "x-request-id": id });
+      }
+    }
     return json({ error: { code: "NOT_FOUND", message: "Route not found", request_id: id } }, 404, { "x-request-id": id });
   },
 };
