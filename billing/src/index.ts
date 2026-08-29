@@ -12,7 +12,7 @@ type SubscriptionEntity = {
   status?: string;
   current_start?: number | null;
   current_end?: number | null;
-  notes?: Record<string, unknown>;
+  notes?: Record<string, unknown> | unknown[];
 };
 
 type SubscriptionEvent = {
@@ -83,6 +83,10 @@ function isFreeDowngradeEvent(eventType: string): boolean {
   return eventType === "subscription.halted" || eventType === "subscription.cancelled" || eventType === "subscription.completed";
 }
 
+function isPreActivationEvent(eventType: string): boolean {
+  return eventType === "subscription.authenticated" || eventType === "subscription.pending";
+}
+
 async function processEvent(env: Env, eventId: string, event: SubscriptionEvent): Promise<void> {
   const eventType = String(event.event ?? "unknown");
   if (!isSubscriptionEvent(eventType)) {
@@ -98,7 +102,8 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   const subscriptionId = subscription.id;
   const planId = String(subscription.plan_id ?? "");
   const razorpayCustomerId = subscription.customer_id ? String(subscription.customer_id) : null;
-  const notes = subscription.notes ?? {};
+  const rawNotes = subscription.notes;
+  const notes: Record<string, unknown> = rawNotes && !Array.isArray(rawNotes) ? rawNotes : {};
 
   const existing = await env.DB.prepare(
     `SELECT customer_id, tier FROM razorpay_subscriptions WHERE subscription_id = ? LIMIT 1`,
@@ -106,6 +111,26 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
 
   const notedCustomerId = typeof notes.momentum_customer_id === "string" ? notes.momentum_customer_id : null;
   const customerId = existing?.customer_id ?? notedCustomerId;
+
+  console.log("Razorpay subscription event", {
+    eventType,
+    subscriptionId,
+    planId,
+    razorpayCustomerId,
+    hasMomentumCustomerMapping: Boolean(customerId),
+    hasExistingSubscription: Boolean(existing),
+  });
+
+  // Razorpay can legitimately send authenticated/pending events before the
+  // subscription has a Momentum customer mapping. Record them without failing
+  // the delivery; activation/renewal events still require a mapping.
+  if (isPreActivationEvent(eventType) && !customerId) {
+    await env.DB.prepare(
+      `UPDATE razorpay_webhook_events SET status='processed', processed_at=?, error_message=NULL WHERE event_id=?`,
+    ).bind(new Date().toISOString(), eventId).run();
+    return;
+  }
+
   if (!customerId) throw new Error("Missing momentum_customer_id mapping");
 
   const mappedTier = planForEvent(env, planId);
@@ -165,7 +190,7 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   }
 
   await env.DB.prepare(
-    `UPDATE razorpay_webhook_events SET status='processed', processed_at=? WHERE event_id=?`,
+    `UPDATE razorpay_webhook_events SET status='processed', processed_at=?, error_message=NULL WHERE event_id=?`,
   ).bind(now, eventId).run();
 }
 
