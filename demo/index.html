@@ -1,92 +1,57 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Momentum API — GitHub Momentum Explorer</title>
-  <meta name="description" content="Explore GitHub repository momentum with Momentum API. Sign in with Google for a free account and run live results.">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <style>
-    :root{color-scheme:dark;--bg:#090b10;--panel:#11151d;--line:#263142;--text:#eef3f8;--muted:#9aa7b8;--accent:#7c5cff;--good:#31c48d;--warn:#f5b942}
-    *{box-sizing:border-box}
-    body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(180deg,#090b10,#0d1118);color:var(--text)}
-    .wrap{max-width:1120px;margin:0 auto;padding:32px 20px 64px}
-    .hero{display:grid;gap:18px;padding:40px 0 24px}
-    .eyebrow{color:#b8a9ff;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px}
-    .hero h1{font-size:clamp(38px,6vw,68px);line-height:1;margin:0;max-width:900px}
-    .hero p{font-size:18px;color:var(--muted);max-width:760px;margin:0}
-    .panel{background:rgba(17,21,29,.9);border:1px solid var(--line);border-radius:18px;padding:20px}
-    .auth{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--line)}
-    .account{display:grid;gap:5px;min-width:240px}.account strong{font-size:16px}.account span{font-size:13px;color:var(--muted)}
-    .auth-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .google-wrap{display:flex;align-items:center;min-height:48px}
-    .fallback-google{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#202124;border:1px solid #dadce0;border-radius:4px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;min-height:42px}
-    .fallback-google:hover{background:#f8f9fa}.google-icon{width:18px;height:18px}
-    .controls{display:grid;grid-template-columns:1.2fr 1fr 1fr .8fr auto auto;gap:12px;align-items:end}
-    .field{display:grid;gap:7px}.field label{font-size:12px;color:var(--muted);font-weight:700}
-    .field input,.field select{width:100%;background:#0b0f15;border:1px solid #303b4d;color:var(--text);border-radius:10px;padding:12px;font:inherit}
-    .btn{border:0;border-radius:10px;padding:12px 16px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}.btn.secondary{background:#202737}.btn.danger{background:#38202a}.btn:disabled{opacity:.5;cursor:not-allowed}
-    .status{margin-top:14px;font-size:13px;color:var(--muted);min-height:20px}
-    .table-wrap{overflow:auto;margin-top:18px}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:13px 10px;border-bottom:1px solid #222b39;white-space:nowrap}.table th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.score{font-weight:900}.high{color:var(--good)}.medium{color:var(--warn)}.low{color:#b0bbc9}.repo{font-weight:700}
-    .footer{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:26px;color:var(--muted);font-size:13px}.footer a{color:#c3b9ff;text-decoration:none}.hidden{display:none!important}
-    @media(max-width:1050px){.controls{grid-template-columns:1fr 1fr 1fr}.controls .full{grid-column:1/-1}}
-    @media(max-width:600px){.controls{grid-template-columns:1fr}.hero{padding-top:20px}}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Momentum API — GitHub Momentum Explorer</title>
+<meta name="description" content="Explore GitHub repository momentum with Momentum API.">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{color-scheme:dark;--bg:#090b10;--panel:#11151d;--line:#263142;--text:#eef3f8;--muted:#9aa7b8;--accent:#7c5cff;--good:#31c48d;--warn:#f5b942}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(180deg,#090b10,#0d1118);color:var(--text)}
+.wrap{max-width:1120px;margin:auto;padding:32px 20px 64px}.hero{display:grid;gap:18px;padding:40px 0 24px}.eyebrow{color:#b8a9ff;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px}.hero h1{font-size:clamp(38px,6vw,68px);line-height:1;margin:0;max-width:900px}.hero p{font-size:18px;color:var(--muted);max-width:760px;margin:0}
+.panel{background:rgba(17,21,29,.9);border:1px solid var(--line);border-radius:18px;padding:20px}.auth{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--line)}.account{display:grid;gap:5px;min-width:260px}.account strong{font-size:16px}.account span{font-size:13px;color:var(--muted)}.auth-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.google-area{display:flex;align-items:center;min-height:44px}.fallback{border:1px solid #dadce0;border-radius:4px;background:#fff;color:#202124;padding:11px 16px;font:600 14px system-ui;cursor:pointer}.fallback:hover{background:#f8f9fa}.google-official{min-height:44px}.hidden{display:none!important}
+.controls{display:grid;grid-template-columns:1.2fr 1fr 1fr .8fr auto auto;gap:12px;align-items:end}.field{display:grid;gap:7px}.field label{font-size:12px;color:var(--muted);font-weight:700}.field input,.field select{width:100%;background:#0b0f15;border:1px solid #303b4d;color:var(--text);border-radius:10px;padding:12px;font:inherit}.btn{border:0;border-radius:10px;padding:12px 16px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}.btn.secondary{background:#202737}.btn.danger{background:#38202a}.btn:disabled{opacity:.5;cursor:not-allowed}.status{margin-top:14px;font-size:13px;color:var(--muted);min-height:20px}.table-wrap{overflow:auto;margin-top:18px}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:13px 10px;border-bottom:1px solid #222b39;white-space:nowrap}.table th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.score{font-weight:900}.high{color:var(--good)}.medium{color:var(--warn)}.low{color:#b0bbc9}.repo{font-weight:700}.footer{margin-top:26px;color:var(--muted);font-size:13px}.footer a{color:#c3b9ff;text-decoration:none}@media(max-width:1050px){.controls{grid-template-columns:1fr 1fr 1fr}.controls .full{grid-column:1/-1}}@media(max-width:600px){.controls{grid-template-columns:1fr}.hero{padding-top:20px}}
+</style>
 </head>
 <body>
 <main class="wrap">
 <section class="hero"><div class="eyebrow">Momentum API</div><h1>Find GitHub projects that are actually gaining momentum.</h1><p>Sign in with Google to get a free Momentum account, explore live repository momentum, and upgrade to Pro when you need more.</p></section>
 <section class="panel">
-  <div class="auth">
-    <div class="account"><strong id="accountTitle">Not signed in</strong><span id="accountMeta">Sign in with Google for your free account.</span></div>
-    <div class="auth-actions">
-      <div class="google-wrap" id="googleArea">
-        <div id="googleButton"></div>
-        <button class="fallback-google" id="googleFallback" type="button">
-          <svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.79-.07-1.55-.22-2.27H12v4.3h5.24a4.48 4.48 0 0 1-1.95 2.94v2.44h3.15c1.84-1.69 2.91-4.18 2.91-7.41Z"/><path fill="#34A853" d="M12 21.75c2.63 0 4.84-.87 6.46-2.36l-3.15-2.44c-.87.58-1.98.92-3.31.92-2.54 0-4.69-1.72-5.46-4.03H3.28v2.52A9.76 9.76 0 0 0 12 21.75Z"/><path fill="#FBBC05" d="M6.54 13.84a5.86 5.86 0 0 1 0-3.68V7.64H3.28a9.75 9.75 0 0 0 0 8.72l3.26-2.52Z"/><path fill="#EA4335" d="M12 6.13c1.43 0 2.72.49 3.74 1.45l2.8-2.8C16.83 3.21 14.62 2.25 12 2.25a9.76 9.76 0 0 0-8.72 5.39l3.26 2.52C7.31 7.85 9.46 6.13 12 6.13Z"/></svg>
-          Sign in with Google
-        </button>
-      </div>
-      <button class="btn hidden" id="upgrade">Upgrade to Pro · ₹99/month</button>
-      <button class="btn danger hidden" id="signout">Sign out</button>
-    </div>
-  </div>
-  <div class="controls"><div class="field"><label for="language">Language</label><input id="language" value="python" placeholder="python"></div><div class="field"><label for="minStars">Minimum stars</label><input id="minStars" type="number" min="0" value="100"></div><div class="field"><label for="maxAge">Max repository age</label><input id="maxAge" type="number" min="1" value="3650"></div><div class="field"><label for="limit">Results</label><select id="limit"><option>5</option><option selected>10</option><option>20</option></select></div><button class="btn secondary" id="preview">Preview</button><button class="btn" id="live" disabled>Run live</button></div>
-  <div class="status" id="status"></div>
-  <div class="table-wrap"><table class="table"><thead><tr><th>Repository</th><th>Stars</th><th>28d commits</th><th>Momentum</th><th>Level</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div class="auth">
+<div class="account"><strong id="accountTitle">Not signed in</strong><span id="accountMeta">Sign in with Google for your free account.</span></div>
+<div class="auth-actions"><div id="googleArea" class="google-area"><div id="googleButton" class="google-official"></div><button id="googleFallback" class="fallback" type="button">Sign in with Google</button></div><button class="btn hidden" id="upgrade">Upgrade to Pro · ₹99/month</button><button class="btn danger hidden" id="signout">Sign out</button></div>
+</div>
+<div class="controls"><div class="field"><label for="language">Language</label><input id="language" value="python" placeholder="python"></div><div class="field"><label for="minStars">Minimum stars</label><input id="minStars" type="number" min="0" value="100"></div><div class="field"><label for="maxAge">Max repository age</label><input id="maxAge" type="number" min="1" value="3650"></div><div class="field"><label for="limit">Results</label><select id="limit"><option>5</option><option selected>10</option><option>20</option></select></div><button class="btn secondary" id="preview">Preview</button><button class="btn" id="live" disabled>Run live</button></div>
+<div class="status" id="status"></div><div class="table-wrap"><table class="table"><thead><tr><th>Repository</th><th>Stars</th><th>28d commits</th><th>Momentum</th><th>Level</th></tr></thead><tbody id="rows"></tbody></table></div>
 </section>
-<footer class="footer"><div>API contract: <a href="../openapi.yaml">OpenAPI</a> · <a href="../README.md">Docs</a></div><div>Explore GitHub momentum with Momentum API</div></footer>
+<footer class="footer">API contract: <a href="../openapi.yaml">OpenAPI</a> · <a href="../README.md">Docs</a></footer>
 </main>
 <script>
 const API_BASE="https://momentum-api-public.manikandanruki2004.workers.dev";
 const RAZORPAY_SUBSCRIPTION_URL="REPLACE_WITH_PUBLIC_RAZORPAY_SUBSCRIPTION_LINK";
-let GOOGLE_CLIENT_ID=null;
-let googleInitialized=false;
-const sample=[["NousResearch/hermes-agent",236700,500,100,"high"],["Significant-Gravitas/AutoGPT",186900,102,89.8,"high"],["yt-dlp/yt-dlp",187000,38,82.8,"high"],["practical-tutorials/project-based-learning",280900,4,68.5,"medium"],["anthropics/skills",171700,6,68.5,"medium"],["microsoft/markdown",176400,3,63.3,"medium"],["donnemartin/system-design-primer",366100,0,35,"low"],["AUTOMATIC1111/stable-diffusion-webui",164700,0,35,"low"]];
-const sampleObjects=sample.map(([repository,stars,commits_28d,momentum_score,momentum_level])=>({repository,stars,commits_28d,momentum_score,momentum_level}));
-const rows=document.getElementById("rows"),status=document.getElementById("status"),limitSelect=document.getElementById("limit"),live=document.getElementById("live"),upgrade=document.getElementById("upgrade"),googleFallback=document.getElementById("googleFallback"),googleButton=document.getElementById("googleButton");
+let GOOGLE_CLIENT_ID="",googleReady=false;
+const sample=[["NousResearch/hermes-agent",236700,500,100,"high"],["Significant-Gravitas/AutoGPT",186900,102,89.8,"high"],["yt-dlp/yt-dlp",187000,38,82.8,"high"],["practical-tutorials/project-based-learning",280900,4,68.5,"medium"],["anthropics/skills",171700,6,68.5,"medium"],["microsoft/markdown",176400,3,63.3,"medium"],["donnemartin/system-design-primer",366100,0,35,"low"],["AUTOMATIC1111/stable-diffusion-webui",164700,0,35,"low"]].map(([repository,stars,commits_28d,momentum_score,momentum_level])=>({repository,stars,commits_28d,momentum_score,momentum_level}));
+const rows=document.getElementById("rows"),status=document.getElementById("status"),limit=document.getElementById("limit"),live=document.getElementById("live"),upgrade=document.getElementById("upgrade"),signout=document.getElementById("signout"),googleFallback=document.getElementById("googleFallback"),googleButton=document.getElementById("googleButton");
 const esc=s=>String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
 function render(data){rows.innerHTML=data.map(r=>`<tr><td class="repo">${esc(r.repository??"—")}</td><td>${Number(r.stars??0).toLocaleString()}</td><td>${esc(r.commits_28d??"—")}</td><td class="score">${Number(r.momentum_score??0).toFixed(2)}</td><td class="${esc(r.momentum_level??"low")}">${esc(r.momentum_level??"unknown")}</td></tr>`).join("");}
-function selectedLimit(){return Math.max(1,Math.min(Number(limitSelect.value)||10,20));}
+function selectedLimit(){return Math.max(1,Math.min(Number(limit.value)||10,20));}
 function params(){return new URLSearchParams({language:document.getElementById("language").value.trim(),min_stars:document.getElementById("minStars").value,max_age_days:document.getElementById("maxAge").value,limit:String(selectedLimit())});}
-function getSession(){return sessionStorage.getItem("momentum_session");}
-function clearSession(){sessionStorage.removeItem("momentum_session");}
-async function authFetch(path,options={}){const token=getSession();const headers=new Headers(options.headers||{});if(token)headers.set("Authorization",`Bearer ${token}`);return fetch(`${API_BASE}${path}`,{...options,headers});}
-async function refreshMe(){const token=getSession();if(!token){showSignedOut();return;}const res=await authFetch("/auth/me");if(!res.ok){clearSession();showSignedOut();return;}const payload=await res.json();showSignedIn(payload);}
-function showSignedIn(p){const c=p.customer||{},plan=p.plan||{};document.getElementById("accountTitle").textContent=c.name||c.email||"Signed in";document.getElementById("accountMeta").textContent=`${c.email||"Google account"} · ${c.tier||"free"} · ${plan.monthly_quota??100} requests/month · ${plan.max_results??10} results/request`;document.getElementById("googleArea").classList.add("hidden");document.getElementById("signout").classList.remove("hidden");live.disabled=false;upgrade.classList.toggle("hidden",c.tier==="pro");}
-function showSignedOut(){document.getElementById("accountTitle").textContent="Not signed in";document.getElementById("accountMeta").textContent="Sign in with Google for your free account.";document.getElementById("googleArea").classList.remove("hidden");document.getElementById("signout").classList.add("hidden");upgrade.classList.add("hidden");live.disabled=true;}
-async function signInWithGoogle(response){status.textContent="Signing in with Google…";try{const res=await fetch(`${API_BASE}/auth/google`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({credential:response.credential})});const payload=await res.json();if(!res.ok)throw new Error(payload?.error?.message||`HTTP ${res.status}`);sessionStorage.setItem("momentum_session",payload.session_token);showSignedIn(payload);status.textContent=payload.customer?.tier==="free"?"Signed in. Your Free account is ready.":"Welcome back.";}catch(err){status.textContent=`Google sign-in failed: ${err.message}`;}}
-function renderGoogleButton(){if(googleInitialized)return false;if(!GOOGLE_CLIENT_ID||!window.google?.accounts?.id)return false;try{google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:signInWithGoogle});googleButton.innerHTML="";google.accounts.id.renderButton(googleButton,{theme:"outline",size:"large",text:"signin_with",shape:"rectangular",width:220});googleInitialized=true;googleFallback.classList.add("hidden");status.textContent="";return true;}catch(err){status.textContent=`Google sign-in is unavailable: ${err.message}`;return false;}}
-async function initGoogle(attempt=0){try{if(!GOOGLE_CLIENT_ID){const res=await fetch(`${API_BASE}/auth/config`,{cache:"no-store"});if(!res.ok)throw new Error(`HTTP ${res.status}`);const cfg=await res.json();GOOGLE_CLIENT_ID=cfg.google_client_id;}if(renderGoogleButton())return;if(attempt<40)setTimeout(()=>initGoogle(attempt+1),250);else status.textContent="Google sign-in could not load. Please refresh the page.";}catch(err){if(attempt<12)setTimeout(()=>initGoogle(attempt+1),500);else status.textContent="Google sign-in configuration is unavailable.";}}
-googleFallback.onclick=()=>{if(renderGoogleButton()){status.textContent="Use the Google sign-in button above.";return;}if(window.google?.accounts?.id){try{google.accounts.id.prompt();}catch{}else{status.textContent="Google sign-in is still loading. Please try again.";initGoogle();}};
-document.getElementById("preview").onclick=()=>{render(sampleObjects.slice(0,Math.min(selectedLimit(),sampleObjects.length)));status.textContent="Sample preview.";};
-limitSelect.addEventListener("change",()=>{render(sampleObjects.slice(0,Math.min(selectedLimit(),sampleObjects.length)));status.textContent="Sample preview updated.";});
-live.onclick=async()=>{if(!getSession()){status.textContent="Sign in with Google first.";return;}status.textContent="Loading live Momentum results…";try{const res=await authFetch(`/v1/momentum?${params().toString()}`);const payload=await res.json();if(!res.ok){if(res.status===401){clearSession();showSignedOut();}throw new Error(payload?.error?.message||`HTTP ${res.status}`);}render(payload.data||[]);status.textContent=`Live result: ${payload.data?.length||0} repositories · ${payload.meta?.tier||"unknown"} plan · ${payload.meta?.result_limit_cap??"?"} results/request.`;}catch(err){status.textContent=`Live request failed: ${err.message}`;}};
+function getSession(){return sessionStorage.getItem("momentum_session");}function clearSession(){sessionStorage.removeItem("momentum_session");}
+async function authFetch(path,options={}){const token=getSession(),headers=new Headers(options.headers||{});if(token)headers.set("Authorization",`Bearer ${token}`);return fetch(`${API_BASE}${path}`,{...options,headers});}
+function showSignedOut(){document.getElementById("accountTitle").textContent="Not signed in";document.getElementById("accountMeta").textContent="Sign in with Google for your free account.";document.getElementById("googleArea").classList.remove("hidden");signout.classList.add("hidden");upgrade.classList.add("hidden");live.disabled=true;}
+function showSignedIn(p){const c=p.customer||{},plan=p.plan||{};document.getElementById("accountTitle").textContent=c.name||c.email||"Signed in";document.getElementById("accountMeta").textContent=`${c.email||"Google account"} · ${c.tier||"free"} · ${plan.monthly_quota??100} requests/month · ${plan.max_results??10} results/request`;document.getElementById("googleArea").classList.add("hidden");signout.classList.remove("hidden");live.disabled=false;upgrade.classList.toggle("hidden",c.tier==="pro");}
+async function refreshMe(){if(!getSession()){showSignedOut();return;}const r=await authFetch("/auth/me");if(!r.ok){clearSession();showSignedOut();return;}showSignedIn(await r.json());}
+async function signInWithGoogle(response){status.textContent="Signing in with Google…";try{const r=await fetch(`${API_BASE}/auth/google`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({credential:response.credential})});const p=await r.json();if(!r.ok)throw new Error(p?.error?.message||`HTTP ${r.status}`);sessionStorage.setItem("momentum_session",p.session_token);showSignedIn(p);status.textContent=p.customer?.tier==="free"?"Signed in. Your Free account is ready.":"Welcome back.";}catch(e){status.textContent=`Google sign-in failed: ${e.message}`;}}
+function initGoogle(){if(googleReady||!GOOGLE_CLIENT_ID||!window.google?.accounts?.id)return false;try{google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:signInWithGoogle});google.accounts.id.renderButton(googleButton,{theme:"outline",size:"large",text:"signin_with",shape:"rectangular",width:220});googleReady=true;googleFallback.classList.add("hidden");status.textContent="";return true;}catch(e){status.textContent="Google sign-in is unavailable. Please refresh and try again.";return false;}}
+async function loadGoogle(attempt=0){try{if(!GOOGLE_CLIENT_ID){const r=await fetch(`${API_BASE}/auth/config`,{cache:"no-store"});if(!r.ok)throw new Error("config");GOOGLE_CLIENT_ID=(await r.json()).google_client_id||"";}if(initGoogle())return;if(attempt<40)setTimeout(()=>loadGoogle(attempt+1),250);else status.textContent="Google sign-in could not load. Please refresh the page.";}catch{if(attempt<12)setTimeout(()=>loadGoogle(attempt+1),500);else status.textContent="Google sign-in configuration is unavailable.";}}
+googleFallback.onclick=()=>{if(initGoogle())return;if(window.google?.accounts?.id){try{google.accounts.id.prompt();}catch(e){status.textContent="Google sign-in could not open. Please try again.";}}else{status.textContent="Google sign-in is still loading…";loadGoogle();}};
+document.getElementById("preview").onclick=()=>{render(sample.slice(0,Math.min(selectedLimit(),sample.length)));status.textContent="Sample preview.";};
+limit.onchange=()=>{render(sample.slice(0,Math.min(selectedLimit(),sample.length)));status.textContent="Sample preview updated.";};
+live.onclick=async()=>{if(!getSession()){status.textContent="Sign in with Google first.";return;}status.textContent="Loading live Momentum results…";try{const r=await authFetch(`/v1/momentum?${params()}`),p=await r.json();if(!r.ok){if(r.status===401){clearSession();showSignedOut();}throw new Error(p?.error?.message||`HTTP ${r.status}`);}render(p.data||[]);status.textContent=`Live result: ${p.data?.length||0} repositories · ${p.meta?.tier||"unknown"} plan.`;}catch(e){status.textContent=`Live request failed: ${e.message}`;}};
 upgrade.onclick=()=>{if(RAZORPAY_SUBSCRIPTION_URL.includes("REPLACE_WITH")){status.textContent="Pro upgrades are being configured.";return;}window.open(RAZORPAY_SUBSCRIPTION_URL,"_blank","noopener");};
-document.getElementById("signout").onclick=async()=>{try{await authFetch("/auth/logout",{method:"POST"});}finally{clearSession();showSignedOut();status.textContent="Signed out.";}};
-render(sampleObjects.slice(0,10));
-refreshMe();
-initGoogle();
+signout.onclick=async()=>{try{await authFetch("/auth/logout",{method:"POST"});}finally{clearSession();showSignedOut();status.textContent="Signed out.";}};
+render(sample.slice(0,10));refreshMe();loadGoogle();
 </script>
 </body>
 </html>
