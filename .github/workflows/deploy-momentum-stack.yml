@@ -134,6 +134,7 @@ jobs:
           cp worker/migrations/0011_razorpay_subscription_state_machine.sql _private-engine/worker/migrations/0011_razorpay_subscription_state_machine.sql
           cp worker/migrations/0012_public_subscription_claims.sql _private-engine/worker/migrations/0012_public_subscription_claims.sql
           cp worker/migrations/0013_google_auth.sql _private-engine/worker/migrations/0013_google_auth.sql
+          cp worker/migrations/0014_free_plan_10_results.sql _private-engine/worker/migrations/0014_free_plan_10_results.sql
 
       - name: Apply engine D1 migrations
         env:
