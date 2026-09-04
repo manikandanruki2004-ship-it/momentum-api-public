@@ -31,34 +31,10 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Build Pages site with Razorpay link
-        env:
-          RAZORPAY_SUBSCRIPTION_URL: ${{ vars.RAZORPAY_SUBSCRIPTION_URL }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$RAZORPAY_SUBSCRIPTION_URL"
-          case "$RAZORPAY_SUBSCRIPTION_URL" in
-            https://rzp.io/*|https://pages.razorpay.com/*) ;;
-            *) echo "RAZORPAY_SUBSCRIPTION_URL must be a Razorpay hosted URL"; exit 1 ;;
-          esac
-          rm -rf _site
-          mkdir -p _site
-          cp -R demo/. _site/
-          node - "$RAZORPAY_SUBSCRIPTION_URL" <<'NODE'
-          const fs = require('fs');
-          const path = '_site/index.html';
-          const url = process.argv[2];
-          let html = fs.readFileSync(path, 'utf8');
-          if (!html.includes('__RAZORPAY_SUBSCRIPTION_URL__')) throw new Error('Razorpay URL placeholder not found');
-          html = html.replaceAll('__RAZORPAY_SUBSCRIPTION_URL__', JSON.stringify(url).slice(1, -1));
-          fs.writeFileSync(path, html);
-          NODE
-
       - name: Upload demo artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: demo
 
       - name: Deploy to GitHub Pages
         id: deployment
