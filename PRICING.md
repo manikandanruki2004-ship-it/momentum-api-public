@@ -1,32 +1,38 @@
 # Momentum API — Launch Pricing
 
-These are launch-plan defaults. Keep pricing adjustable while validating demand and operating cost.
+These are the public launch-plan defaults. Pricing and limits can be adjusted later while validating demand and operating cost.
 
 | Tier | Requests / month | Rate limit | Results / request | Intended use |
 |---|---:|---:|---:|---|
-| Free | 100 | 10/min | 5 | Evaluation and small scripts |
-| Starter | 5,000 | 30/min | 10 | Personal tools and prototypes |
-| Pro | 50,000 | 120/min | 20 | Production apps |
+| Free | 100 | 10/min | 10 | Evaluation and small scripts |
+| Pro | 10,000 | 60/min | 25 | Production apps and automation |
+
+## Account experience
+
+Users sign in with Google. A new Google account automatically receives the Free plan. Normal web users do not need to copy or manage an API key.
+
+Developer API keys remain available as an advanced integration mechanism for applications that call Momentum directly.
+
+## Pro billing
+
+Momentum has one public paid plan: Pro at ₹99/month. The public website uses one reusable Razorpay Subscription Link. Each payer receives a separate Razorpay subscription; the link itself is not tied to one customer.
+
+Momentum activates Pro only after a verified Razorpay subscription event for the allow-listed Pro plan. The billing service can associate a subscription with a Google account using the payer email received from Razorpay. A signed webhook remains the source of truth for billing state.
 
 ## Plan enforcement
 
 The private engine stores plan limits in its centralized D1 `plans` table. Result limits are enforced server-side by customer tier.
 
-- **Free:** maximum 5 repositories per request.
-- **Starter:** maximum 10 repositories per request.
-- **Pro:** maximum 20 repositories per request.
+- **Free:** maximum 10 repositories per request.
+- **Pro:** maximum 25 repositories per request.
 
-The public API accepts `limit=1..20`, but the customer's plan cap is the effective maximum. The response `meta.result_limit_cap` reports the active plan's cap.
+The public API accepts the global parameter range supported by the server, but the customer's plan cap is the effective maximum. The response `meta.result_limit_cap` reports the active plan's cap.
 
-Unknown or inactive tiers are rejected during customer provisioning. Plan quota and rate-limit values are enforced centrally rather than trusting caller-supplied values.
+Quota and rate-limit values are enforced centrally rather than trusting caller-supplied values.
 
 ## Pricing principle
 
 Price around the value of reliable repository momentum data while preserving margin for upstream API usage, Cloudflare usage, support, and failed requests.
-
-## Launch policy
-
-Start with Free + Starter + Pro. Keep the plan definitions centralized so pricing or limits can change without rewriting request handling.
 
 ## Important
 
