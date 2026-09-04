@@ -13,20 +13,9 @@ The engine remains the source of truth for API limits. Billing state is changed 
 
 ## Sign-in
 
-Momentum now uses Google Sign-In for the customer-facing account experience. Google Identity Services returns an ID token to the backend; the backend verifies the token signature, issuer, audience, expiry, verified email, and stable Google `sub` identifier before creating or locating the Momentum account. Google documents `sub` as the unique user identifier and requires server-side token validation. 
+Momentum uses Google Sign-In for the customer-facing account experience. Google ID tokens are verified server-side before an account is created or loaded. A new Google account receives the Free plan automatically.
 
-Public endpoint:
-
-```text
-POST /auth/google
-Content-Type: application/json
-
-{"credential":"<Google ID token>"}
-```
-
-The endpoint creates a Free account automatically when the Google account is new. Free accounts receive 100 requests/month, 10 requests/minute, and 10 results/request.
-
-The API key remains an internal developer credential for compatibility with the existing API layer; it is not the user-facing sign-in method.
+The browser receives a 30-day Momentum session token. The session token is stored hashed in D1 and is used only as the browser credential. Developer API keys remain available for direct API integrations.
 
 ## Public customer flow
 
@@ -34,46 +23,55 @@ The API key remains an internal developer credential for compatibility with the 
 2. Momentum verifies the Google ID token and creates or loads the customer's Free account.
 3. User opens the single public Pro Subscription Link.
 4. Razorpay creates a separate subscription for that payer.
-5. Momentum receives the signed subscription webhook and stores the subscription as unclaimed.
-6. The authenticated billing flow associates that subscription with the signed-in Momentum customer.
-7. A verified Pro subscription changes the account to Pro.
-8. Later `activated`, `resumed`, `charged`, `paused`, `pending`, `halted`, `cancelled`, `completed`, or `expired` webhook events automatically update access.
+5. Momentum receives the signed subscription webhook.
+6. On a verified subscription/payment event, Momentum records the Razorpay payer email and automatically matches it to the unique Google-account email in Momentum.
+7. The subscription is attached to that customer and Pro is activated. No API key and no manual subscription ID are required for normal users.
+8. Later `activated`, `resumed`, `charged`, `paused`, `pending`, `halted`, `cancelled`, `completed`, or `expired` webhook events update the customer's entitlement.
 
-This design means the public link can be published on a website, documentation page, README, or social post without embedding a customer ID.
+The public link can therefore be published on a website, documentation page, README, or social post without embedding a customer ID.
+
+## Public endpoints
+
+```http
+POST /auth/google
+GET  /auth/config
+GET  /auth/me
+POST /auth/logout
+
+POST /webhooks/razorpay
+POST /billing/claim
+```
+
+`/billing/claim` is a recovery endpoint. The normal website flow does not ask users to enter a subscription ID.
 
 ## Environment configuration
 
-Production billing uses:
+Production uses:
 
 ```text
+GOOGLE_CLIENT_ID
 RAZORPAY_WEBHOOK_SECRET
 RAZORPAY_PRO_PLAN_ID
 API_KEY_PEPPER
-GOOGLE_CLIENT_ID
 ```
 
-The Razorpay API key and API secret are only needed locally when creating/testing plans or subscription links in Razorpay Test Mode. They are not required by the production Worker when the public Subscription Link is created in the Razorpay Dashboard.
-
-## Google configuration
-
-Create a Google OAuth 2.0 Web application client and store its Client ID as the GitHub Actions secret `GOOGLE_CLIENT_ID`. The frontend must use the same Client ID with Google Identity Services. Google requires the configured authorized origins/redirect URIs to match the application. urlGoogle Sign In with Google JavaScript referencehttps://developers.google.com/identity/gsi/web/reference/js-reference
+The Razorpay API key and API secret are only needed locally when creating/testing plans or Subscription Links in Razorpay Test Mode. They are not required by the production Worker for the Dashboard-created public Subscription Link architecture.
 
 ## Security
 
-- Verify the Google ID-token signature and claims server-side; use the Google `sub` claim as the durable account identifier.
-- Require `email_verified=true` before creating or linking an account.
+- Verify the Google ID-token signature, issuer, audience, expiration, and verified email server-side.
+- Use Google's stable `sub` identifier for account identity.
 - Verify the Razorpay signature against the exact raw request body using HMAC-SHA256.
-- Treat `x-razorpay-event-id` as the idempotency key and reject payload changes for a reused event ID.
-- Keep Google Client ID configuration, Razorpay webhook secret, and API-key pepper server-side.
-- Never accept `tier=pro` from a browser and grant Pro directly.
+- Treat `x-razorpay-event-id` as the webhook idempotency key and reject a reused event ID with a different payload.
+- Never grant Pro from browser-supplied plan/tier data.
 - Only the allow-listed `RAZORPAY_PRO_PLAN_ID` can grant Pro.
+- Automatic subscription linking happens only after a verified Razorpay event and an exact normalized email match.
 - Terminal subscription events remove the current Pro entitlement.
+- Keep Google configuration, Razorpay webhook secret, and API-key pepper server-side.
 
 ## Test first
 
-Use Razorpay Test Mode to create exactly one test Pro plan and one reusable test Subscription Link. Use the same link for multiple test customers. The test helper in `tools/razorpay-test.mjs` prints the plan ID and reusable link.
-
-Do not point Test Mode webhooks at a production secret. Configure the webhook secret in the environment that receives Test Mode events, and use separate test identifiers from Live Mode.
+Use Razorpay Test Mode to create exactly one test Pro plan and one reusable test Subscription Link. Use the same link for multiple test customers. Keep Test Mode webhook secrets and plan IDs separate from Live Mode values. Do not point Test Mode webhooks at a production secret.
 
 ## Production setup
 
