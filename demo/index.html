@@ -29,7 +29,6 @@
 </main>
 <script>
 const API_BASE="https://momentum-api-public.manikandanruki2004.workers.dev";
-const RAZORPAY_SUBSCRIPTION_URL="__RAZORPAY_SUBSCRIPTION_URL__";
 let GOOGLE_CLIENT_ID="",googleReady=false;
 const sample=[["NousResearch/hermes-agent",236700,500,100,"high"],["Significant-Gravitas/AutoGPT",186900,102,89.8,"high"],["yt-dlp/yt-dlp",187000,38,82.8,"high"],["practical-tutorials/project-based-learning",280900,4,68.5,"medium"],["anthropics/skills",171700,6,68.5,"medium"],["microsoft/markdown",176400,3,63.3,"medium"],["donnemartin/system-design-primer",366100,0,35,"low"],["AUTOMATIC1111/stable-diffusion-webui",164700,0,35,"low"]].map(([repository,stars,commits_28d,momentum_score,momentum_level])=>({repository,stars,commits_28d,momentum_score,momentum_level}));
 const rows=document.getElementById("rows"),status=document.getElementById("status"),limit=document.getElementById("limit"),live=document.getElementById("live"),upgrade=document.getElementById("upgrade"),signout=document.getElementById("signout"),googleFallback=document.getElementById("googleFallback"),googleButton=document.getElementById("googleButton");
@@ -49,7 +48,7 @@ googleFallback.onclick=()=>{if(initGoogle())return;if(window.google?.accounts?.i
 document.getElementById("preview").onclick=()=>{render(sample.slice(0,Math.min(selectedLimit(),sample.length)));status.textContent="Sample preview.";};
 limit.onchange=()=>{render(sample.slice(0,Math.min(selectedLimit(),sample.length)));status.textContent="Sample preview updated.";};
 live.onclick=async()=>{if(!getSession()){status.textContent="Sign in with Google first.";return;}status.textContent="Loading live Momentum results…";try{const r=await authFetch(`/v1/momentum?${params()}`),p=await r.json();if(!r.ok){if(r.status===401){clearSession();showSignedOut();}throw new Error(p?.error?.message||`HTTP ${r.status}`);}render(p.data||[]);status.textContent=`Live result: ${p.data?.length||0} repositories · ${p.meta?.tier||"unknown"} plan.`;}catch(e){status.textContent=`Live request failed: ${e.message}`;}};
-upgrade.onclick=()=>{if(!RAZORPAY_SUBSCRIPTION_URL||RAZORPAY_SUBSCRIPTION_URL.includes("__RAZORPAY_SUBSCRIPTION_URL__")){status.textContent="Pro upgrades are being configured.";return;}status.textContent="Opening Pro checkout…";window.location.assign(RAZORPAY_SUBSCRIPTION_URL);};
+upgrade.onclick=()=>{status.textContent="Opening Pro checkout…";window.location.assign(`${API_BASE}/billing/checkout`);};
 signout.onclick=async()=>{try{await authFetch("/auth/logout",{method:"POST"});}finally{clearSession();showSignedOut();status.textContent="Signed out.";}};
 render(sample.slice(0,10));refreshMe();loadGoogle();
 </script>
