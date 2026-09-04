@@ -28,13 +28,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
     steps:
       - name: Checkout public gateway
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-
       - name: Checkout private engine
         uses: actions/checkout@v4
         with:
@@ -43,7 +41,6 @@ jobs:
           ref: ${{ inputs.private_engine_ref || 'main' }}
           path: _private-engine
           persist-credentials: false
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -54,39 +51,30 @@ jobs:
             billing/package.json
             auth/package.json
             _private-engine/worker/package.json
-
       - name: Install gateway dependencies
         working-directory: worker
         run: npm install --no-audit --no-fund
-
       - name: Install billing dependencies
         working-directory: billing
         run: npm install --no-audit --no-fund
-
       - name: Install auth dependencies
         working-directory: auth
         run: npm install --no-audit --no-fund
-
       - name: Install engine dependencies
         working-directory: _private-engine/worker
         run: npm install --no-audit --no-fund
-
       - name: Typecheck gateway
         working-directory: worker
         run: npm run typecheck
-
       - name: Typecheck billing
         working-directory: billing
         run: npm run typecheck
-
       - name: Typecheck auth
         working-directory: auth
         run: npm run typecheck
-
       - name: Typecheck engine
         working-directory: _private-engine/worker
         run: npm run typecheck
-
       - name: Provision Cloudflare D1 and KV
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -125,7 +113,6 @@ jobs:
           base.workers_dev = true;
           fs.writeFileSync('wrangler.deploy.json', JSON.stringify(base, null, 2));
           NODE
-
       - name: Sync billing migrations into engine checkout
         run: |
           cp worker/migrations/0008_razorpay_billing.sql _private-engine/worker/migrations/0008_razorpay_billing.sql
@@ -135,21 +122,18 @@ jobs:
           cp worker/migrations/0012_public_subscription_claims.sql _private-engine/worker/migrations/0012_public_subscription_claims.sql
           cp worker/migrations/0013_google_auth.sql _private-engine/worker/migrations/0013_google_auth.sql
           cp worker/migrations/0014_free_plan_10_results.sql _private-engine/worker/migrations/0014_free_plan_10_results.sql
-
       - name: Apply engine D1 migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: _private-engine/worker
         run: npx wrangler d1 migrations apply momentum-production --remote --config wrangler.deploy.json
-
       - name: Deploy private engine
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: _private-engine/worker
         run: npx wrangler deploy --config wrangler.deploy.json
-
       - name: Install private Worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -164,7 +148,6 @@ jobs:
           printf '%s' "$MOMENTUM_GITHUB_TOKEN" | npx wrangler secret put GITHUB_TOKEN --config wrangler.deploy.json
           printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json
           printf '%s' "$MOMENTUM_ADMIN_SECRET" | npx wrangler secret put ADMIN_SECRET --config wrangler.deploy.json
-
       - name: Create billing Worker config
         working-directory: billing
         run: |
@@ -175,14 +158,12 @@ jobs:
           const config = { name: 'momentum-billing', main: 'src/index.ts', compatibility_date: '2026-08-25', workers_dev: true, observability: { enabled: true }, d1_databases: [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2] }] };
           fs.writeFileSync('wrangler.deploy.json', JSON.stringify(config, null, 2));
           NODE
-
       - name: Deploy billing Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: billing
         run: npx wrangler deploy --config wrangler.deploy.json
-
       - name: Install billing Worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -197,7 +178,6 @@ jobs:
           if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json; fi
           if [ -n "$RAZORPAY_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json; fi
           if [ -n "$MOMENTUM_API_KEY_PEPPER" ]; then printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json; fi
-
       - name: Create Google auth Worker config
         working-directory: auth
         run: |
@@ -205,17 +185,15 @@ jobs:
           DB_ID="$(cat "$GITHUB_WORKSPACE/.momentum_db_id")"
           node - "$DB_ID" <<'NODE'
           const fs = require('fs');
-          const config = { name: 'momentum-auth', main: 'src/index.ts', compatibility_date: '2026-08-25', workers_dev: true, observability: { enabled: true }, d1_databases: [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2] }] };
+          const config = { name: 'momentum-auth', main: 'src/index.ts', compatibility_date: '2026-08-25', workers_dev: true, observability: { enabled: true }, triggers: { crons: ['0 * * * *'] }, d1_databases: [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2] }] };
           fs.writeFileSync('wrangler.deploy.json', JSON.stringify(config, null, 2));
           NODE
-
       - name: Deploy Google auth Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: auth
         run: npx wrangler deploy --config wrangler.deploy.json
-
       - name: Install Google auth Worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -229,14 +207,12 @@ jobs:
           test -n "$GOOGLE_CLIENT_ID"
           printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json
           printf '%s' "$GOOGLE_CLIENT_ID" | npx wrangler secret put GOOGLE_CLIENT_ID --config wrangler.deploy.json
-
       - name: Deploy public gateway
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: worker
         run: npx wrangler deploy
-
       - name: Smoke test public gateway
         shell: bash
         run: |
@@ -245,10 +221,13 @@ jobs:
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/health" | tee /tmp/health.json
           jq -e '.status == "ok" and .service == "momentum-api-public" and .auth == "service-binding"' /tmp/health.json >/dev/null
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/version" | tee /tmp/version.json
-          jq -e '.name == "Momentum API" and .auth == "1.0.0"' /tmp/version.json >/dev/null
+          jq -e '.name == "Momentum API" and .auth == "1.1.0"' /tmp/version.json >/dev/null
           AUTH_STATUS="$(curl --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/auth/google" -H 'Content-Type: application/json' -d '{}')"
           test "$AUTH_STATUS" = "400"
           jq -e '.error.code == "MISSING_CREDENTIAL"' /tmp/auth.json >/dev/null
+          AUTH_ME_STATUS="$(curl --silent --show-error --output /tmp/auth-me.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/auth/me")"
+          test "$AUTH_ME_STATUS" = "401"
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/auth-me.json >/dev/null
           ME_STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/v1/me")"
           test "$ME_STATUS" = "401"
           jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
