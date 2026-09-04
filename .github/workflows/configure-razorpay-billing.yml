@@ -1,0 +1,80 @@
+name: Configure Razorpay Billing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        working-directory: billing
+        run: npm install --no-audit --no-fund
+
+      - name: Create billing Worker config
+        working-directory: billing
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const api = process.env.CLOUDFLARE_API_TOKEN;
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          if (!api || !account) throw new Error('Cloudflare credentials are required');
+          (async () => {
+            const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/d1/database`, { headers: { Authorization: `Bearer ${api}` } });
+            const body = await r.json();
+            if (!body.success) throw new Error('Could not list D1 databases');
+            const db = body.result.find(x => x.name === 'momentum-production');
+            if (!db) throw new Error('momentum-production D1 database not found');
+            fs.writeFileSync('wrangler.deploy.json', JSON.stringify({ name:'momentum-billing', main:'src/index.ts', compatibility_date:'2026-08-25', workers_dev:true, observability:{enabled:true}, d1_databases:[{binding:'DB',database_name:'momentum-production',database_id:db.uuid}] }, null, 2));
+          })();
+          NODE
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Install active Razorpay credentials
+        working-directory: billing
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_PRO_PLAN_ID: ${{ secrets.RAZORPAY_PRO_PLAN_ID }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_TEST_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_TEST_WEBHOOK_SECRET }}
+          RAZORPAY_TEST_PRO_PLAN_ID: ${{ secrets.RAZORPAY_TEST_PRO_PLAN_ID }}
+          MOMENTUM_API_KEY_PEPPER: ${{ secrets.MOMENTUM_API_KEY_PEPPER }}
+        run: |
+          set -euo pipefail
+          test -n "$RAZORPAY_KEY_ID"
+          test -n "$RAZORPAY_KEY_SECRET"
+          test -n "$RAZORPAY_PRO_PLAN_ID"
+          printf '%s' "$RAZORPAY_KEY_ID" | npx wrangler secret put RAZORPAY_KEY_ID --config wrangler.deploy.json
+          printf '%s' "$RAZORPAY_KEY_SECRET" | npx wrangler secret put RAZORPAY_KEY_SECRET --config wrangler.deploy.json
+          printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json
+          if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json; fi
+          if [ -n "$RAZORPAY_TEST_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_TEST_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_TEST_WEBHOOK_SECRET --config wrangler.deploy.json; fi
+          if [ -n "$RAZORPAY_TEST_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_TEST_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_TEST_PRO_PLAN_ID --config wrangler.deploy.json; fi
+          if [ -n "$MOMENTUM_API_KEY_PEPPER" ]; then printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json; fi
+
+      - name: Verify billing Worker health
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 https://momentum-billing.manikandanruki2004.workers.dev/health
