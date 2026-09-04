@@ -210,8 +210,17 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RAZORPAY_SUBSCRIPTION_URL: ${{ vars.RAZORPAY_SUBSCRIPTION_URL }}
         working-directory: worker
-        run: npx wrangler deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RAZORPAY_SUBSCRIPTION_URL"
+          case "$RAZORPAY_SUBSCRIPTION_URL" in
+            https://rzp.io/*|https://pages.razorpay.com/*) ;;
+            *) echo "RAZORPAY_SUBSCRIPTION_URL must be a Razorpay hosted URL"; exit 1 ;;
+          esac
+          npx wrangler deploy --var "RAZORPAY_SUBSCRIPTION_URL:${RAZORPAY_SUBSCRIPTION_URL}"
       - name: Smoke test public gateway
         shell: bash
         run: |
@@ -220,7 +229,7 @@ jobs:
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/health" | tee /tmp/health.json
           jq -e '.status == "ok" and .service == "momentum-api-public" and .auth == "service-binding"' /tmp/health.json >/dev/null
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/version" | tee /tmp/version.json
-          jq -e '.name == "Momentum API" and .auth == "1.1.0"' /tmp/version.json >/dev/null
+          jq -e '.name == "Momentum API" and .version == "1.7.0" and .auth == "1.1.0"' /tmp/version.json >/dev/null
           AUTH_STATUS="$(curl --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/auth/google" -H 'Content-Type: application/json' -d '{}')"
           test "$AUTH_STATUS" = "400"
           jq -e '.error.code == "MISSING_CREDENTIAL"' /tmp/auth.json >/dev/null
@@ -234,4 +243,6 @@ jobs:
           test "$BILLING_STATUS" = "401" -o "$BILLING_STATUS" = "503"
           CLAIM_STATUS="$(curl --silent --show-error --output /tmp/claim.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/billing/claim" -H 'Content-Type: application/json' -d '{}')"
           test "$CLAIM_STATUS" = "401" -o "$CLAIM_STATUS" = "503"
+          CHECKOUT_STATUS="$(curl --silent --show-error --output /tmp/checkout.html --write-out '%{http_code}' --max-redirs 0 --retry 5 --retry-delay 3 "$BASE_URL/billing/checkout")"
+          test "$CHECKOUT_STATUS" = "302"
           echo "Public Momentum stack smoke checks passed."
