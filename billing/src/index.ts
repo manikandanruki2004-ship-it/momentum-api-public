@@ -55,8 +55,9 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   const razorpayCustomerId = subscription.customer_id ? String(subscription.customer_id) : null;
   const rawNotes = subscription.notes;
   const notes: Record<string, unknown> = rawNotes && !Array.isArray(rawNotes) ? rawNotes : {};
+  const eventTime = Number(event.created_at ?? 0);
 
-  const existing = await env.DB.prepare(`SELECT customer_id, tier, status, current_start, current_end, updated_at FROM razorpay_subscriptions WHERE subscription_id = ? LIMIT 1`).bind(subscriptionId).first<{ customer_id: string; tier: string; status: string; current_start: number | null; current_end: number | null; updated_at: string }>();
+  const existing = await env.DB.prepare(`SELECT customer_id, tier, status, current_start, current_end, updated_at, last_event_created_at FROM razorpay_subscriptions WHERE subscription_id = ? LIMIT 1`).bind(subscriptionId).first<{ customer_id: string; tier: string; status: string; current_start: number | null; current_end: number | null; updated_at: string; last_event_created_at: number | null }>();
   const notedCustomerId = typeof notes.momentum_customer_id === "string" ? notes.momentum_customer_id : null;
   const customerId = existing?.customer_id ?? notedCustomerId;
 
@@ -69,15 +70,16 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   const mappedTier = planForEvent(env, planId);
   let tier: "free" | "starter" | "pro" | null = null;
   if (isActivationEvent(eventType) || isRenewalEvent(eventType) || eventType === "subscription.updated") {
-    tier = mappedTier ?? (existing && ["starter", "pro", "free"].includes(existing.tier) ? existing.tier as "starter" | "pro" | "free" : null);
+    tier = mappedTier;
   }
   if (isFreeDowngradeEvent(eventType)) tier = "free";
   if (isPauseEvent(eventType)) tier = existing && ["starter", "pro", "free"].includes(existing.tier) ? existing.tier as "starter" | "pro" | "free" : mappedTier;
   if ((isActivationEvent(eventType) || eventType === "subscription.updated") && !tier) throw new Error("Unknown Razorpay plan id");
 
-  const eventTime = Number(event.created_at ?? 0);
-  const priorTime = existing?.updated_at ? Date.parse(existing.updated_at) / 1000 : 0;
-  if (eventTime > 0 && priorTime > 0 && eventTime < priorTime) {
+  // Protect against valid but older events arriving after a newer event.
+  // Compare Razorpay's event timestamp with the last accepted Razorpay event,
+  // not with the local row update time.
+  if (eventTime > 0 && existing?.last_event_created_at != null && eventTime < existing.last_event_created_at) {
     await env.DB.prepare(`UPDATE razorpay_webhook_events SET status='ignored', processed_at=?, error_message=NULL WHERE event_id=?`).bind(new Date().toISOString(), eventId).run();
     return;
   }
@@ -85,7 +87,7 @@ async function processEvent(env: Env, eventId: string, event: SubscriptionEvent)
   const now = new Date().toISOString();
   const storedTier = tier ?? "unknown";
   const currentStatus = String(subscription.status ?? eventType);
-  await env.DB.prepare(`INSERT INTO razorpay_subscriptions(subscription_id, customer_id, razorpay_customer_id, plan_id, tier, status, current_start, current_end, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(subscription_id) DO UPDATE SET customer_id=excluded.customer_id, razorpay_customer_id=excluded.razorpay_customer_id, plan_id=excluded.plan_id, tier=excluded.tier, status=excluded.status, current_start=excluded.current_start, current_end=excluded.current_end, updated_at=excluded.updated_at`).bind(subscriptionId, customerId, razorpayCustomerId, planId, storedTier, currentStatus, subscription.current_start ?? null, subscription.current_end ?? null, now, now).run();
+  await env.DB.prepare(`INSERT INTO razorpay_subscriptions(subscription_id, customer_id, razorpay_customer_id, plan_id, tier, status, current_start, current_end, created_at, updated_at, last_event_created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(subscription_id) DO UPDATE SET customer_id=excluded.customer_id, razorpay_customer_id=excluded.razorpay_customer_id, plan_id=excluded.plan_id, tier=excluded.tier, status=excluded.status, current_start=excluded.current_start, current_end=excluded.current_end, updated_at=excluded.updated_at, last_event_created_at=CASE WHEN excluded.last_event_created_at IS NOT NULL THEN excluded.last_event_created_at ELSE razorpay_subscriptions.last_event_created_at END`).bind(subscriptionId, customerId, razorpayCustomerId, planId, storedTier, currentStatus, subscription.current_start ?? null, subscription.current_end ?? null, now, now, eventTime > 0 ? eventTime : null).run();
 
   if (isActivationEvent(eventType) || isRenewalEvent(eventType) || eventType === "subscription.updated" || isFreeDowngradeEvent(eventType)) {
     await env.DB.prepare(`UPDATE customers SET tier=?, monthly_quota=(SELECT monthly_quota FROM plans WHERE tier=? AND active=1), rate_limit_per_minute=(SELECT rate_limit_per_minute FROM plans WHERE tier=? AND active=1), active=1 WHERE id=?`).bind(tier, tier, tier, customerId).run();
