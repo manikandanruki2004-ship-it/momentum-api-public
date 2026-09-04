@@ -26,6 +26,7 @@ export default {
     const isBillingClaim = url.pathname === "/billing/claim";
     const isCheckout = url.pathname === "/billing/checkout";
     const isAllowedPost = (isAuth && request.method === "POST") || ((isCustomerProvisioning || isRazorpayWebhook || isBillingClaim || isCheckout) && request.method === "POST");
+    const isAllowedCheckoutGet = isCheckout && request.method === "GET";
     if (request.method !== "GET" && !isAllowedPost) return json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed", request_id: id } }, 405, { allow: "GET,POST,OPTIONS", "x-request-id": id });
 
     if (url.pathname === "/health") return json({ status: "ok", service: "momentum-api-public", engine: "service-binding", billing: "service-binding", auth: "service-binding" }, 200, { "x-request-id": id });
@@ -52,4 +53,4 @@ export default {
   },
 };
 
-// Release 1.8.0: Pro checkout is created per authenticated Momentum customer by the billing Worker.
+// Release 1.8.1: GET /billing/checkout is routed to billing; the billing Worker authenticates the Momentum session cookie and creates a customer-specific Razorpay checkout.
