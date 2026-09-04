@@ -13,65 +13,36 @@
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <section class="hero">
-      <div class="eyebrow">Momentum API</div>
-      <h1>Find GitHub projects that are actually gaining momentum.</h1>
-      <p>Sign in with Google to get a free Momentum account, explore live repository momentum, and upgrade to Pro when you need more.</p>
-    </section>
-
-    <section class="panel">
-      <div class="auth">
-        <div class="account"><strong id="accountTitle">Not signed in</strong><span id="accountMeta">Sign in with Google for your free account.</span></div>
-        <div class="auth-actions"><div id="googleButton"></div><button class="btn hidden" id="upgrade">Upgrade to Pro · ₹99/month</button><button class="btn danger hidden" id="signout">Sign out</button></div>
-      </div>
-
-      <div class="controls">
-        <div class="field"><label for="language">Language</label><input id="language" value="python" placeholder="python"></div>
-        <div class="field"><label for="minStars">Minimum stars</label><input id="minStars" type="number" min="0" value="100"></div>
-        <div class="field"><label for="maxAge">Max repository age</label><input id="maxAge" type="number" min="1" value="3650"></div>
-        <div class="field"><label for="limit">Results</label><select id="limit"><option>5</option><option selected>10</option><option>20</option></select></div>
-        <button class="btn secondary" id="preview">Preview</button>
-        <button class="btn" id="live" disabled>Run live</button>
-      </div>
-
-      <div class="status" id="status"></div>
-      <div class="table-wrap"><table class="table"><thead><tr><th>Repository</th><th>Stars</th><th>28d commits</th><th>Momentum</th><th>Level</th></tr></thead><tbody id="rows"></tbody></table></div>
-    </section>
-
-    <footer class="footer">
-      <div>API contract: <a href="../openapi.yaml">OpenAPI</a> · <a href="../README.md">Docs</a></div>
-      <div>Production endpoint: <code>momentum-api-public.manikandanruki2004.workers.dev</code></div>
-    </footer>
-  </main>
-
-  <script>
-    const API_BASE="https://momentum-api-public.manikandanruki2004.workers.dev";
-    const GOOGLE_CLIENT_ID="REPLACE_WITH_GOOGLE_CLIENT_ID";
-    const RAZORPAY_SUBSCRIPTION_URL="REPLACE_WITH_PUBLIC_RAZORPAY_SUBSCRIPTION_LINK";
-    const sample=[
-      ["NousResearch/hermes-agent",236700,500,100,"high"],["Significant-Gravitas/AutoGPT",186900,102,89.8,"high"],["yt-dlp/yt-dlp",187000,38,82.8,"high"],["practical-tutorials/project-based-learning",280900,4,68.5,"medium"],["anthropics/skills",171700,6,68.5,"medium"],["microsoft/markdown",176400,3,63.3,"medium"],["donnemartin/system-design-primer",366100,0,35,"low"],["AUTOMATIC1111/stable-diffusion-webui",164700,0,35,"low"]
-    ];
-    const sampleObjects=sample.map(([repository,stars,commits_28d,momentum_score,momentum_level])=>({repository,stars,commits_28d,momentum_score,momentum_level}));
-    const rows=document.getElementById("rows"),status=document.getElementById("status"),limitSelect=document.getElementById("limit"),live=document.getElementById("live"),upgrade=document.getElementById("upgrade");
-    const esc=s=>String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
-    function render(data){rows.innerHTML=data.map(r=>`<tr><td class="repo">${esc(r.repository??"—")}</td><td>${Number.isFinite(Number(r.stars))?Number(r.stars).toLocaleString():"—"}</td><td>${esc(r.commits_28d??"—")}</td><td class="score">${Number.isFinite(Number(r.momentum_score))?Number(r.momentum_score).toFixed(2):"—"}</td><td class="${esc(r.momentum_level??"low")}">${esc(r.momentum_level??"unknown")}</td></tr>`).join("");}
-    function selectedLimit(){return Math.max(1,Math.min(Number(limitSelect.value)||10,20));}
-    function params(){return new URLSearchParams({language:document.getElementById("language").value.trim(),min_stars:document.getElementById("minStars").value,max_age_days:document.getElementById("maxAge").value,limit:String(selectedLimit())});}
-    function renderSample(){render(sampleObjects.slice(0,Math.min(selectedLimit(),sampleObjects.length)));}
-    function saveAuth(p){sessionStorage.setItem("momentum_auth",JSON.stringify(p));}
-    function loadAuth(){try{return JSON.parse(sessionStorage.getItem("momentum_auth")||"null");}catch{return null;}}
-    function clearAuth(){sessionStorage.removeItem("momentum_auth");}
-    function showSignedIn(p){const c=p?.customer||{},plan=p?.plan||{};document.getElementById("accountTitle").textContent=c.name||c.email||"Signed in";document.getElementById("accountMeta").textContent=`${c.email||"Google account"} · ${c.tier||"free"} · ${plan.monthly_quota??100} requests/month · ${plan.max_results??10} results/request`;document.getElementById("googleButton").classList.add("hidden");document.getElementById("signout").classList.remove("hidden");live.disabled=!p?.api_key;upgrade.classList.toggle("hidden",c.tier==="pro");}
-    function showSignedOut(){document.getElementById("accountTitle").textContent="Not signed in";document.getElementById("accountMeta").textContent="Sign in with Google for your free account.";document.getElementById("googleButton").classList.remove("hidden");document.getElementById("signout").classList.add("hidden");upgrade.classList.add("hidden");live.disabled=true;}
-    async function signInWithGoogle(response){status.textContent="Signing in with Google…";try{const res=await fetch(`${API_BASE}/auth/google`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({credential:response.credential})});const payload=await res.json();if(!res.ok)throw new Error(payload?.error?.message||`HTTP ${res.status}`);saveAuth(payload);showSignedIn(payload);status.textContent=payload.created?"Free account created successfully.":"Welcome back.";}catch(err){status.textContent=`Google sign-in failed: ${err.message}`;}}
-    function initGoogle(){if(GOOGLE_CLIENT_ID.includes("REPLACE_WITH")){status.textContent="Set GOOGLE_CLIENT_ID in this page before publishing the Google sign-in button.";return;}if(!window.google?.accounts?.id){setTimeout(initGoogle,300);return;}google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:signInWithGoogle});google.accounts.id.renderButton(document.getElementById("googleButton"),{theme:"outline",size:"large",text:"signin_with",shape:"rectangular",width:220});}
-    document.getElementById("preview").onclick=()=>{renderSample();status.textContent="Sample preview.";};
-    limitSelect.addEventListener("change",()=>{renderSample();status.textContent="Sample preview updated.";});
-    live.onclick=async()=>{const p=loadAuth(),key=p?.api_key;if(!key){status.textContent="Sign in with Google first.";return;}status.textContent="Loading live Momentum results…";try{const res=await fetch(`${API_BASE}/v1/momentum?${params().toString()}`,{headers:{"X-API-Key":key}});const payload=await res.json();if(!res.ok)throw new Error(payload?.error?.message||`HTTP ${res.status}`);render(payload.data||[]);status.textContent=`Live result: ${payload.data?.length||0} repositories · ${payload.meta?.tier||"unknown"} plan · ${payload.meta?.result_limit_cap??"?"} results/request.`;}catch(err){status.textContent=`Live request failed: ${err.message}`;}};
-    upgrade.onclick=()=>{if(RAZORPAY_SUBSCRIPTION_URL.includes("REPLACE_WITH")){status.textContent="Add the public Razorpay Subscription Link URL before publishing the upgrade button.";return;}window.location.href=RAZORPAY_SUBSCRIPTION_URL;};
-    document.getElementById("signout").onclick=()=>{clearAuth();showSignedOut();status.textContent="Signed out.";};
-    renderSample();const existing=loadAuth();if(existing)showSignedIn(existing);else showSignedOut();initGoogle();
-  </script>
+<main class="wrap">
+<section class="hero"><div class="eyebrow">Momentum API</div><h1>Find GitHub projects that are actually gaining momentum.</h1><p>Sign in with Google to get a free Momentum account, explore live repository momentum, and upgrade to Pro when you need more.</p></section>
+<section class="panel">
+<div class="auth"><div class="account"><strong id="accountTitle">Not signed in</strong><span id="accountMeta">Sign in with Google for your free account.</span></div><div class="auth-actions"><div id="googleButton"></div><button class="btn hidden" id="upgrade">Upgrade to Pro · ₹99/month</button><button class="btn danger hidden" id="signout">Sign out</button></div></div>
+<div class="controls"><div class="field"><label for="language">Language</label><input id="language" value="python" placeholder="python"></div><div class="field"><label for="minStars">Minimum stars</label><input id="minStars" type="number" min="0" value="100"></div><div class="field"><label for="maxAge">Max repository age</label><input id="maxAge" type="number" min="1" value="3650"></div><div class="field"><label for="limit">Results</label><select id="limit"><option>5</option><option selected>10</option><option>20</option></select></div><button class="btn secondary" id="preview">Preview</button><button class="btn" id="live" disabled>Run live</button></div>
+<div class="status" id="status"></div><div class="table-wrap"><table class="table"><thead><tr><th>Repository</th><th>Stars</th><th>28d commits</th><th>Momentum</th><th>Level</th></tr></thead><tbody id="rows"></tbody></table></div>
+</section>
+<footer class="footer"><div>API contract: <a href="../openapi.yaml">OpenAPI</a> · <a href="../README.md">Docs</a></div><div>Production endpoint: <code>momentum-api-public.manikandanruki2004.workers.dev</code></div></footer>
+</main>
+<script>
+const API_BASE="https://momentum-api-public.manikandanruki2004.workers.dev";let GOOGLE_CLIENT_ID=null;const RAZORPAY_SUBSCRIPTION_URL="REPLACE_WITH_PUBLIC_RAZORPAY_SUBSCRIPTION_LINK";
+const sample=[["NousResearch/hermes-agent",236700,500,100,"high"],["Significant-Gravitas/AutoGPT",186900,102,89.8,"high"],["yt-dlp/yt-dlp",187000,38,82.8,"high"],["practical-tutorials/project-based-learning",280900,4,68.5,"medium"],["anthropics/skills",171700,6,68.5,"medium"],["microsoft/markdown",176400,3,63.3,"medium"],["donnemartin/system-design-primer",366100,0,35,"low"],["AUTOMATIC1111/stable-diffusion-webui",164700,0,35,"low"]];
+const sampleObjects=sample.map(([repository,stars,commits_28d,momentum_score,momentum_level])=>({repository,stars,commits_28d,momentum_score,momentum_level}));
+const rows=document.getElementById("rows"),status=document.getElementById("status"),limitSelect=document.getElementById("limit"),live=document.getElementById("live"),upgrade=document.getElementById("upgrade");
+const esc=s=>String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+function render(data){rows.innerHTML=data.map(r=>`<tr><td class="repo">${esc(r.repository??"—")}</td><td>${Number(r.stars??0).toLocaleString()}</td><td>${esc(r.commits_28d??"—")}</td><td class="score">${Number(r.momentum_score??0).toFixed(2)}</td><td class="${esc(r.momentum_level??"low")}">${esc(r.momentum_level??"unknown")}</td></tr>`).join("");}
+function selectedLimit(){return Math.max(1,Math.min(Number(limitSelect.value)||10,20));}
+function params(){return new URLSearchParams({language:document.getElementById("language").value.trim(),min_stars:document.getElementById("minStars").value,max_age_days:document.getElementById("maxAge").value,limit:String(selectedLimit())});}
+function getSession(){return sessionStorage.getItem("momentum_session");}function clearSession(){sessionStorage.removeItem("momentum_session");}
+async function authFetch(path,options={}){const token=getSession();const headers=new Headers(options.headers||{});if(token)headers.set("Authorization",`Bearer ${token}`);return fetch(`${API_BASE}${path}`,{...options,headers});}
+async function refreshMe(){const token=getSession();if(!token){showSignedOut();return;}const res=await authFetch("/auth/me");if(!res.ok){clearSession();showSignedOut();return;}const payload=await res.json();showSignedIn(payload);}
+function showSignedIn(p){const c=p.customer||{},plan=p.plan||{};document.getElementById("accountTitle").textContent=c.name||c.email||"Signed in";document.getElementById("accountMeta").textContent=`${c.email||"Google account"} · ${c.tier||"free"} · ${plan.monthly_quota??100} requests/month · ${plan.max_results??10} results/request`;document.getElementById("googleButton").classList.add("hidden");document.getElementById("signout").classList.remove("hidden");live.disabled=false;upgrade.classList.toggle("hidden",c.tier==="pro");}
+function showSignedOut(){document.getElementById("accountTitle").textContent="Not signed in";document.getElementById("accountMeta").textContent="Sign in with Google for your free account.";document.getElementById("googleButton").classList.remove("hidden");document.getElementById("signout").classList.add("hidden");upgrade.classList.add("hidden");live.disabled=true;}
+async function signInWithGoogle(response){status.textContent="Signing in with Google…";try{const res=await fetch(`${API_BASE}/auth/google`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({credential:response.credential})});const payload=await res.json();if(!res.ok)throw new Error(payload?.error?.message||`HTTP ${res.status}`);sessionStorage.setItem("momentum_session",payload.session_token);showSignedIn(payload);status.textContent=payload.customer?.tier==="free"?"Signed in. Your Free account is ready.":"Welcome back.";}catch(err){status.textContent=`Google sign-in failed: ${err.message}`;}}
+async function initGoogle(){try{const res=await fetch(`${API_BASE}/auth/config`);const cfg=await res.json();GOOGLE_CLIENT_ID=cfg.google_client_id;if(!GOOGLE_CLIENT_ID||!window.google?.accounts?.id){setTimeout(initGoogle,300);return;}google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:signInWithGoogle});google.accounts.id.renderButton(document.getElementById("googleButton"),{theme:"outline",size:"large",text:"signin_with",shape:"rectangular",width:220});}catch{status.textContent="Google sign-in configuration is unavailable.";}}
+document.getElementById("preview").onclick=()=>{render(sampleObjects.slice(0,Math.min(selectedLimit(),sampleObjects.length)));status.textContent="Sample preview.";};limitSelect.addEventListener("change",()=>{render(sampleObjects.slice(0,Math.min(selectedLimit(),sampleObjects.length)));status.textContent="Sample preview updated.";});
+live.onclick=async()=>{if(!getSession()){status.textContent="Sign in with Google first.";return;}status.textContent="Loading live Momentum results…";try{const res=await authFetch(`/v1/momentum?${params().toString()}`);const payload=await res.json();if(!res.ok){if(res.status===401){clearSession();showSignedOut();}throw new Error(payload?.error?.message||`HTTP ${res.status}`);}render(payload.data||[]);status.textContent=`Live result: ${payload.data?.length||0} repositories · ${payload.meta?.tier||"unknown"} plan · ${payload.meta?.result_limit_cap??"?"} results/request.`;}catch(err){status.textContent=`Live request failed: ${err.message}`;}};
+upgrade.onclick=()=>{if(RAZORPAY_SUBSCRIPTION_URL.includes("REPLACE_WITH")){status.textContent="Configure the public Razorpay Subscription Link before publishing upgrades.";return;}window.open(RAZORPAY_SUBSCRIPTION_URL,"_blank","noopener");};
+document.getElementById("signout").onclick=async()=>{try{await authFetch("/auth/logout",{method:"POST"});}finally{clearSession();showSignedOut();status.textContent="Signed out.";}};
+renderSample;render(sampleObjects.slice(0,10));refreshMe();initGoogle();
+</script>
 </body>
 </html>
