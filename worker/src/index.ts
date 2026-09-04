@@ -2,7 +2,6 @@ interface Env {
   ENGINE: Fetcher;
   BILLING: Fetcher;
   AUTH: Fetcher;
-  RAZORPAY_SUBSCRIPTION_URL?: string;
 }
 
 const corsHeaders = {
@@ -26,23 +25,13 @@ export default {
     const isRazorpayWebhook = url.pathname === "/webhooks/razorpay";
     const isBillingClaim = url.pathname === "/billing/claim";
     const isCheckout = url.pathname === "/billing/checkout";
-    const isAllowedPost = (isAuth ? request.method === "POST" || request.method === "GET" : false) || ((isCustomerProvisioning || isRazorpayWebhook || isBillingClaim) && request.method === "POST");
-    if (request.method !== "GET" && !isAllowedPost && !isCheckout) return json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed", request_id: id } }, 405, { allow: "GET,POST,OPTIONS", "x-request-id": id });
+    const isAllowedPost = (isAuth && request.method === "POST") || ((isCustomerProvisioning || isRazorpayWebhook || isBillingClaim || isCheckout) && request.method === "POST");
+    if (request.method !== "GET" && !isAllowedPost) return json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed", request_id: id } }, 405, { allow: "GET,POST,OPTIONS", "x-request-id": id });
 
     if (url.pathname === "/health") return json({ status: "ok", service: "momentum-api-public", engine: "service-binding", billing: "service-binding", auth: "service-binding" }, 200, { "x-request-id": id });
-    if (url.pathname === "/version") return json({ name: "Momentum API", version: "1.7.0", engine: "1.3.1", billing: "1.1.0", auth: "1.1.0" }, 200, { "x-request-id": id });
-    if (isCheckout) {
-      const target = env.RAZORPAY_SUBSCRIPTION_URL;
-      if (!target) return json({ error: { code: "BILLING_NOT_CONFIGURED", message: "Pro checkout is not configured", request_id: id } }, 503, { "x-request-id": id });
-      try {
-        const u = new URL(target);
-        if (u.protocol !== "https:" || !["rzp.io", "pages.razorpay.com"].includes(u.hostname)) throw new Error("invalid checkout URL");
-      } catch {
-        return json({ error: { code: "BILLING_NOT_CONFIGURED", message: "Pro checkout URL is invalid", request_id: id } }, 503, { "x-request-id": id });
-      }
-      return new Response(null, { status: 302, headers: { Location: target, "cache-control": "no-store", "x-request-id": id } });
-    }
-    if (!url.pathname.startsWith("/v1/") && !isAuth && !isCustomerProvisioning && !isRazorpayWebhook && !isBillingClaim) return json({ error: { code: "NOT_FOUND", message: "Route not found", request_id: id } }, 404, { "x-request-id": id });
+    if (url.pathname === "/version") return json({ name: "Momentum API", version: "1.8.0", engine: "1.3.1", billing: "1.2.0", auth: "1.1.0" }, 200, { "x-request-id": id });
+
+    if (!url.pathname.startsWith("/v1/") && !isAuth && !isCustomerProvisioning && !isRazorpayWebhook && !isBillingClaim && !isCheckout) return json({ error: { code: "NOT_FOUND", message: "Route not found", request_id: id } }, 404, { "x-request-id": id });
 
     const headers = new Headers(request.headers);
     headers.set("x-request-id", id);
@@ -50,7 +39,7 @@ export default {
     try {
       let binding = env.ENGINE;
       if (isAuth) binding = env.AUTH;
-      else if (isRazorpayWebhook || isBillingClaim) binding = env.BILLING;
+      else if (isRazorpayWebhook || isBillingClaim || isCheckout) binding = env.BILLING;
       const response = await binding.fetch(upstreamRequest);
       const outHeaders = new Headers(response.headers);
       outHeaders.set("x-request-id", id);
@@ -63,4 +52,4 @@ export default {
   },
 };
 
-// Release 1.7.0: Pro checkout is resolved by the gateway from RAZORPAY_SUBSCRIPTION_URL, allowing Test/Live link replacement without changing demo code.
+// Release 1.8.0: Pro checkout is created per authenticated Momentum customer by the billing Worker.
