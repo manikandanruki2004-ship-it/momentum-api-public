@@ -6,13 +6,8 @@
   "workers_dev": true,
   "observability": { "enabled": true },
   "services": [
-    {
-      "binding": "ENGINE",
-      "service": "momentum-engine"
-    },
-    {
-      "binding": "BILLING",
-      "service": "momentum-billing"
-    }
+    { "binding": "ENGINE", "service": "momentum-engine" },
+    { "binding": "BILLING", "service": "momentum-billing" },
+    { "binding": "AUTH", "service": "momentum-auth" }
   ]
 }
