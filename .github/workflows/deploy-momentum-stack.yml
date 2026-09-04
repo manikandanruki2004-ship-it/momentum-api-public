@@ -6,6 +6,7 @@ on:
     paths:
       - 'worker/**'
       - 'billing/**'
+      - 'auth/**'
       - 'worker/migrations/**'
       - '.github/workflows/deploy-momentum-stack.yml'
   workflow_dispatch:
@@ -51,6 +52,7 @@ jobs:
           cache-dependency-path: |
             worker/package.json
             billing/package.json
+            auth/package.json
             _private-engine/worker/package.json
 
       - name: Install gateway dependencies
@@ -59,6 +61,10 @@ jobs:
 
       - name: Install billing dependencies
         working-directory: billing
+        run: npm install --no-audit --no-fund
+
+      - name: Install auth dependencies
+        working-directory: auth
         run: npm install --no-audit --no-fund
 
       - name: Install engine dependencies
@@ -71,6 +77,10 @@ jobs:
 
       - name: Typecheck billing
         working-directory: billing
+        run: npm run typecheck
+
+      - name: Typecheck auth
+        working-directory: auth
         run: npm run typecheck
 
       - name: Typecheck engine
@@ -123,6 +133,7 @@ jobs:
           cp worker/migrations/0010_razorpay_current_subscription.sql _private-engine/worker/migrations/0010_razorpay_current_subscription.sql
           cp worker/migrations/0011_razorpay_subscription_state_machine.sql _private-engine/worker/migrations/0011_razorpay_subscription_state_machine.sql
           cp worker/migrations/0012_public_subscription_claims.sql _private-engine/worker/migrations/0012_public_subscription_claims.sql
+          cp worker/migrations/0013_google_auth.sql _private-engine/worker/migrations/0013_google_auth.sql
 
       - name: Apply engine D1 migrations
         env:
@@ -186,6 +197,38 @@ jobs:
           if [ -n "$RAZORPAY_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json; fi
           if [ -n "$MOMENTUM_API_KEY_PEPPER" ]; then printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json; fi
 
+      - name: Create Google auth Worker config
+        working-directory: auth
+        run: |
+          set -euo pipefail
+          DB_ID="$(cat "$GITHUB_WORKSPACE/.momentum_db_id")"
+          node - "$DB_ID" <<'NODE'
+          const fs = require('fs');
+          const config = { name: 'momentum-auth', main: 'src/index.ts', compatibility_date: '2026-08-25', workers_dev: true, observability: { enabled: true }, d1_databases: [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2] }] };
+          fs.writeFileSync('wrangler.deploy.json', JSON.stringify(config, null, 2));
+          NODE
+
+      - name: Deploy Google auth Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: auth
+        run: npx wrangler deploy --config wrangler.deploy.json
+
+      - name: Install Google auth Worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MOMENTUM_API_KEY_PEPPER: ${{ secrets.MOMENTUM_API_KEY_PEPPER }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        working-directory: auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GOOGLE_CLIENT_ID"
+          printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json
+          printf '%s' "$GOOGLE_CLIENT_ID" | npx wrangler secret put GOOGLE_CLIENT_ID --config wrangler.deploy.json
+
       - name: Deploy public gateway
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -199,9 +242,12 @@ jobs:
           set -euo pipefail
           BASE_URL="https://momentum-api-public.manikandanruki2004.workers.dev"
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/health" | tee /tmp/health.json
-          jq -e '.status == "ok" and .service == "momentum-api-public"' /tmp/health.json >/dev/null
+          jq -e '.status == "ok" and .service == "momentum-api-public" and .auth == "service-binding"' /tmp/health.json >/dev/null
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/version" | tee /tmp/version.json
-          jq -e '.name == "Momentum API"' /tmp/version.json >/dev/null
+          jq -e '.name == "Momentum API" and .auth == "1.0.0"' /tmp/version.json >/dev/null
+          AUTH_STATUS="$(curl --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/auth/google" -H 'Content-Type: application/json' -d '{}')"
+          test "$AUTH_STATUS" = "400"
+          jq -e '.error.code == "MISSING_CREDENTIAL"' /tmp/auth.json >/dev/null
           ME_STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/v1/me")"
           test "$ME_STATUS" = "401"
           jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
