@@ -165,14 +165,18 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_TEST_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_TEST_WEBHOOK_SECRET }}
           RAZORPAY_PRO_PLAN_ID: ${{ secrets.RAZORPAY_PRO_PLAN_ID }}
+          RAZORPAY_TEST_PRO_PLAN_ID: ${{ secrets.RAZORPAY_TEST_PRO_PLAN_ID }}
           MOMENTUM_API_KEY_PEPPER: ${{ secrets.MOMENTUM_API_KEY_PEPPER }}
         working-directory: billing
         shell: bash
         run: |
           set -euo pipefail
           if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json; fi
+          if [ -n "$RAZORPAY_TEST_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_TEST_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_TEST_WEBHOOK_SECRET --config wrangler.deploy.json; fi
           if [ -n "$RAZORPAY_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json; fi
+          if [ -n "$RAZORPAY_TEST_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_TEST_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_TEST_PRO_PLAN_ID --config wrangler.deploy.json; fi
           if [ -n "$MOMENTUM_API_KEY_PEPPER" ]; then printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json; fi
       - name: Create Google auth Worker config
         working-directory: auth
