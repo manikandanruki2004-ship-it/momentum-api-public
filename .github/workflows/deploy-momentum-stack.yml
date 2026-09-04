@@ -89,27 +89,23 @@ jobs:
           DB_NAME="momentum-production"
           KV_TITLE="momentum-rate-limit"
           AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json")
-          echo "Discovering D1 database..."
           curl --fail-with-body --silent --show-error "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" > /tmp/d1-list.json
-          jq -e '.success == true' /tmp/d1-list.json >/dev/null || { cat /tmp/d1-list.json >&2; exit 1; }
+          jq -e '.success == true' /tmp/d1-list.json >/dev/null
           DB_ID="$(jq -r --arg name "$DB_NAME" '.result[] | select(.name == $name) | .uuid' /tmp/d1-list.json | head -n 1)"
           if [ -z "$DB_ID" ]; then
-            echo "Creating D1 database $DB_NAME..."
             curl --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" --data "{\"name\":\"${DB_NAME}\"}" > /tmp/d1-create.json
-            jq -e '.success == true' /tmp/d1-create.json >/dev/null || { cat /tmp/d1-create.json >&2; exit 1; }
+            jq -e '.success == true' /tmp/d1-create.json >/dev/null
             DB_ID="$(jq -r '.result.uuid // empty' /tmp/d1-create.json)"
           fi
-          echo "Discovering KV namespace..."
           curl --fail-with-body --silent --show-error "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" > /tmp/kv-list.json
-          jq -e '.success == true' /tmp/kv-list.json >/dev/null || { cat /tmp/kv-list.json >&2; exit 1; }
+          jq -e '.success == true' /tmp/kv-list.json >/dev/null
           KV_ID="$(jq -r --arg title "$KV_TITLE" '.result[] | select(.title == $title) | .id' /tmp/kv-list.json | head -n 1)"
           if [ -z "$KV_ID" ]; then
-            echo "Creating KV namespace $KV_TITLE..."
             curl --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" --data "{\"title\":\"${KV_TITLE}\"}" > /tmp/kv-create.json
-            jq -e '.success == true' /tmp/kv-create.json >/dev/null || { cat /tmp/kv-create.json >&2; exit 1; }
+            jq -e '.success == true' /tmp/kv-create.json >/dev/null
             KV_ID="$(jq -r '.result.id // empty' /tmp/kv-create.json)"
           fi
-          if [ -z "$DB_ID" ] || [ -z "$KV_ID" ]; then echo "Unable to provision or discover Cloudflare resource IDs." >&2; exit 1; fi
+          test -n "$DB_ID"; test -n "$KV_ID"
           printf '%s' "$DB_ID" > "$GITHUB_WORKSPACE/.momentum_db_id"
           node - "$DB_ID" "$KV_ID" <<'NODE'
           const fs = require('fs');
@@ -125,6 +121,8 @@ jobs:
           cp worker/migrations/0008_razorpay_billing.sql _private-engine/worker/migrations/0008_razorpay_billing.sql
           cp worker/migrations/0009_razorpay_event_ordering.sql _private-engine/worker/migrations/0009_razorpay_event_ordering.sql
           cp worker/migrations/0010_razorpay_current_subscription.sql _private-engine/worker/migrations/0010_razorpay_current_subscription.sql
+          cp worker/migrations/0011_razorpay_subscription_state_machine.sql _private-engine/worker/migrations/0011_razorpay_subscription_state_machine.sql
+          cp worker/migrations/0012_public_subscription_claims.sql _private-engine/worker/migrations/0012_public_subscription_claims.sql
 
       - name: Apply engine D1 migrations
         env:
@@ -162,14 +160,7 @@ jobs:
           DB_ID="$(cat "$GITHUB_WORKSPACE/.momentum_db_id")"
           node - "$DB_ID" <<'NODE'
           const fs = require('fs');
-          const config = {
-            name: 'momentum-billing',
-            main: 'src/index.ts',
-            compatibility_date: '2026-08-25',
-            workers_dev: true,
-            observability: { enabled: true },
-            d1_databases: [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2] }]
-          };
+          const config = { name: 'momentum-billing', main: 'src/index.ts', compatibility_date: '2026-08-25', workers_dev: true, observability: { enabled: true }, d1_databases: [{ binding: 'DB', database_name: 'momentum-production', database_id: process.argv[2] }] };
           fs.writeFileSync('wrangler.deploy.json', JSON.stringify(config, null, 2));
           NODE
 
@@ -185,19 +176,15 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
-          RAZORPAY_STARTER_PLAN_ID: ${{ secrets.RAZORPAY_STARTER_PLAN_ID }}
           RAZORPAY_PRO_PLAN_ID: ${{ secrets.RAZORPAY_PRO_PLAN_ID }}
+          MOMENTUM_API_KEY_PEPPER: ${{ secrets.MOMENTUM_API_KEY_PEPPER }}
         working-directory: billing
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then
-            printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json
-          else
-            echo "RAZORPAY_WEBHOOK_SECRET is not configured yet; webhook endpoint will return 503."
-          fi
-          if [ -n "$RAZORPAY_STARTER_PLAN_ID" ]; then printf '%s' "$RAZORPAY_STARTER_PLAN_ID" | npx wrangler secret put RAZORPAY_STARTER_PLAN_ID --config wrangler.deploy.json; fi
+          if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json; fi
           if [ -n "$RAZORPAY_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json; fi
+          if [ -n "$MOMENTUM_API_KEY_PEPPER" ]; then printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json; fi
 
       - name: Deploy public gateway
         env:
@@ -211,17 +198,15 @@ jobs:
         run: |
           set -euo pipefail
           BASE_URL="https://momentum-api-public.manikandanruki2004.workers.dev"
-          echo "Checking /health..."
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/health" | tee /tmp/health.json
           jq -e '.status == "ok" and .service == "momentum-api-public"' /tmp/health.json >/dev/null
-          echo "Checking /version..."
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/version" | tee /tmp/version.json
           jq -e '.name == "Momentum API"' /tmp/version.json >/dev/null
-          echo "Checking /v1/me route protection..."
           ME_STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/v1/me")"
           test "$ME_STATUS" = "401"
           jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
-          echo "Checking Razorpay webhook route..."
           BILLING_STATUS="$(curl --silent --show-error --output /tmp/razorpay.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/webhooks/razorpay" -H 'Content-Type: application/json' -d '{}')"
           test "$BILLING_STATUS" = "401" -o "$BILLING_STATUS" = "503"
-          echo "Public gateway, account, and billing route smoke checks passed."
+          CLAIM_STATUS="$(curl --silent --show-error --output /tmp/claim.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/billing/claim" -H 'Content-Type: application/json' -d '{}')"
+          test "$CLAIM_STATUS" = "401" -o "$CLAIM_STATUS" = "503"
+          echo "Public Momentum stack smoke checks passed."
