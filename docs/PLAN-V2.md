@@ -41,9 +41,9 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - [x] Binding-level health probe.
 - [x] Customer-ID reconciliation migration.
 - [x] Checkout source repair path.
-- [x] Add binding smoke test to the post-deploy release gate.
-- [ ] Add idempotent checkout-attempt handling to prevent duplicate subscriptions from concurrent clicks.
-- [ ] Finish provider adapter separation in the billing service.
+- [x] Binding smoke test in the post-deploy release gate.
+- [x] Idempotent checkout-attempt handling with a per-customer D1 lease and reusable checkout URL.
+- [x] Razorpay billing calls isolated behind a `BillingProvider` adapter.
 
 ### Phase D — security
 
@@ -55,7 +55,8 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 
 ### Phase E — reliability/performance
 
-- [ ] Add shared timeout helpers to all outbound calls.
+- [x] Razorpay subscription creation has a bounded timeout.
+- [ ] Add shared timeout helpers to all other outbound calls.
 - [ ] Add safe retry-with-backoff where justified.
 - [ ] Add circuit breaking around repeatedly failing external dependencies.
 - [ ] Make remaining shared-state updates atomic.
