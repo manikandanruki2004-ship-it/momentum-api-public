@@ -21,6 +21,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 9. Protect authentication from repeated failed attempts.
 10. User-facing errors stay calm and safe; detailed diagnostics remain server-side.
 11. Ship only after automated checks pass and the real browser path is verified.
+12. Do not automatically retry Razorpay subscription creation because it is a remote mutation; retries are reserved for reads or operations with proven idempotency.
 
 ## Delivery phases
 
@@ -47,6 +48,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - [x] Binding smoke test in the post-deploy release gate.
 - [x] Idempotent checkout-attempt handling with a per-customer D1 lease and reusable checkout URL.
 - [x] Razorpay billing calls isolated behind a `BillingProvider` adapter.
+- [x] Razorpay subscription reads also use the billing adapter with bounded timeouts.
 
 ### Phase D — security
 
@@ -59,7 +61,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 ### Phase E — reliability/performance
 
 - [x] Razorpay and critical binding/provider calls have bounded timeouts.
-- [ ] Add safe retry-with-backoff where justified.
+- [ ] Add safe retry-with-backoff where justified, limited to idempotent reads/operations.
 - [ ] Add circuit breaking around repeatedly failing external dependencies.
 - [ ] Make remaining shared-state updates atomic.
 - [ ] Audit rate limiting per user and per IP.
