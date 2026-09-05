@@ -62,6 +62,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Retry-with-backoff is limited to the idempotent Razorpay subscription read path and capped at a small number of attempts.
 - [x] Retried subscription reads use a shorter per-attempt timeout so the full retry budget remains below the gateway's 8-second upstream deadline.
 - [x] Razorpay read failures now open a small bounded circuit breaker before repeated dependency calls continue.
+- [x] The read circuit allows only one half-open probe after cooldown, preventing a dependency recovery stampede.
 - [x] Provider event IDs are used for webhook deduplication.
 - [x] Checkout persistence failure cannot hide a successfully created Razorpay checkout URL.
 - [x] Concurrent checkout attempts use a D1-backed per-customer lease and can reuse an existing checkout URL.
@@ -94,8 +95,8 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Typechecks run for core Workers during CI/deployment.
 - [x] Engineering-contract checks run in CI.
 - [x] Billing provider unit tests cover create, read, failure, malformed-id, timeout, and bounded-retry behavior.
-- [x] Add integration-style health checks for binding-to-service paths.
-- [x] Add Playwright smoke coverage for the public demo and critical anonymous boundaries.
+- [x] Integration-style health checks for binding-to-service paths.
+- [x] Playwright smoke coverage for the public demo and critical anonymous boundaries.
 - [x] CI/CD deployment exists.
 - [x] Deployment smoke tests verify gateway version plus direct billing/auth binding health.
 - [x] Post-deploy production release gate verifies the deployed gateway, bindings, security headers, protected routes, and current browser UI markers.
@@ -104,6 +105,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Release contract validates the billing status route and gateway routing.
 - [x] CI validates the presence of the gateway rate-limit contract.
 - [x] Provider tests validate circuit opening after repeated read failures.
+- [x] Provider tests validate single-probe recovery behavior after circuit cooldown.
 
 ## Provider abstraction
 
