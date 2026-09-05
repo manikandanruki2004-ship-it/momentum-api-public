@@ -96,7 +96,7 @@ jobs:
           jq -e '.success == true' /tmp/kv-list.json >/dev/null
           KV_ID="$(jq -r --arg title "$KV_TITLE" '.result[] | select(.title == $title) | .id' /tmp/kv-list.json | head -n 1)"
           if [ -z "$KV_ID" ]; then
-            curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" --data "{\"title\":\"${KV_TITLE}\"}" > /tmp/kv-create.json
+            curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" --data "{\"title\":\"${KV_TITLE}\"}" > /tmp/kv-create.json
             jq -e '.success == true' /tmp/kv-create.json >/dev/null
             KV_ID="$(jq -r '.result.id // empty' /tmp/kv-create.json)"
           fi
@@ -289,3 +289,4 @@ jobs:
           check_status "$CHECKOUT_STATUS" "302"
           grep -Eiq '^location: https://(rzp\.io|pages\.razorpay\.com)/' /tmp/checkout-check.html
           grep -Eiq '^cache-control: no-store' /tmp/checkout-check.html
+          echo "Public Momentum stack smoke checks passed."
