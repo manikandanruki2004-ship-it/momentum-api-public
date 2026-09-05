@@ -60,6 +60,9 @@ jobs:
       - name: Validate rate-limit contract
         run: node tools/check-rate-limit-contract.mjs
 
+      - name: Validate webhook atomicity
+        run: node tools/validate-webhook-atomicity.mjs
+
       - name: Install gateway dependencies
         working-directory: worker
         run: npm install --no-audit --no-fund
