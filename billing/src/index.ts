@@ -1,3 +1,5 @@
+import { RazorpayProvider, type RazorpaySubscriptionResponse } from "./provider";
+
 interface Env {
   DB: D1Database;
   API_KEY_PEPPER?: string;
@@ -13,11 +15,11 @@ type Customer = { id: string; name: string; email: string | null; tier: string; 
 type Sub = { id?: string; plan_id?: string; customer_id?: string; status?: string; current_start?: number | null; current_end?: number | null; ended_at?: number | null; notes?: Record<string, string> };
 type PaymentEntity = { email?: string | null };
 type Event = { event?: string; created_at?: number; payload?: { subscription?: { entity?: Sub }; payment?: { entity?: PaymentEntity } } };
-type RazorpayResponse = { id?: string; short_url?: string; status?: string; plan_id?: string; error?: { code?: string; description?: string } };
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
 const requestId = () => `req_${crypto.randomUUID().replaceAll("-", "")}`;
 const nowIso = () => new Date().toISOString();
+const laterIso = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
 const hex = (b: ArrayBuffer) => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, "0")).join("");
 
 async function hmac(secret: string, body: string) {
@@ -113,7 +115,7 @@ async function webhook(req: Request, env: Env, id: string) {
   const old = await env.DB.prepare("SELECT status,payload_sha256 FROM razorpay_webhook_events WHERE event_id=? LIMIT 1").bind(eventId).first<{ status: string; payload_sha256: string }>();
   if (old) { if (old.payload_sha256 !== hash) return json({ error: { code: "EVENT_ID_REUSE", message: "Event id reused with different payload", request_id: id } }, 409); if (old.status === "processed" || old.status === "ignored") return json({ status: "ok", duplicate: true, request_id: id }); }
   await env.DB.prepare("INSERT OR IGNORE INTO razorpay_webhook_events(event_id,event_type,status,received_at,payload_sha256) VALUES(?,?,?,?,?)").bind(eventId, String(event.event ?? "unknown"), "received", nowIso(), hash).run();
-  try { await processEvent(env, eventId, event); } catch (e) { const msg = e instanceof Error ? e.message : "Webhook processing failed"; await markEvent(env, eventId, "failed", msg.slice(0, 500)); console.error("Razorpay webhook processing failed", e); return json({ error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing failed; retry the event", request_id: id } }, 500); }
+  try { await processEvent(env, eventId, event); } catch (e) { const msg = e instanceof Error ? e.message : "Webhook processing failed"; await markEvent(env, eventId, "failed", msg.slice(0, 500)); console.error("Razorpay webhook processing failed", { request_id: id, event_id: eventId, error: msg }); return json({ error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing failed; retry the event", request_id: id } }, 500); }
   return json({ status: "processed", request_id: id });
 }
 
@@ -125,6 +127,26 @@ async function getSessionCustomer(req: Request, env: Env): Promise<Customer | nu
   return env.DB.prepare(`SELECT c.id,c.name,c.email,c.tier,c.active FROM auth_sessions s JOIN customers c ON c.id=s.customer_id WHERE s.session_id_hash=? AND s.expires_at>? LIMIT 1`).bind(h, nowIso()).first<Customer>();
 }
 
+async function acquireCheckoutLease(env: Env, customerId: string) {
+  const current = await env.DB.prepare("SELECT status,subscription_id,checkout_url,expires_at FROM razorpay_checkout_attempts WHERE customer_id=? LIMIT 1").bind(customerId).first<{ status: string; subscription_id: string | null; checkout_url: string | null; expires_at: string }>();
+  const now = nowIso();
+  if (current && current.expires_at > now) {
+    if (current.status === "created" && current.checkout_url) return { acquired: false, existingUrl: current.checkout_url };
+    if (current.status === "creating") return { acquired: false, inProgress: true };
+  }
+  const created = nowIso(), expires = laterIso(10);
+  const result = await env.DB.prepare(`INSERT INTO razorpay_checkout_attempts(customer_id,status,created_at,updated_at,expires_at) VALUES(?,?,?,?,?) ON CONFLICT(customer_id) DO UPDATE SET subscription_id=NULL,checkout_url=NULL,status='creating',updated_at=excluded.updated_at,expires_at=excluded.expires_at WHERE razorpay_checkout_attempts.expires_at<=? OR razorpay_checkout_attempts.status='failed'`).bind(customerId, "creating", created, created, expires, now).run();
+  if (result.meta.changes !== 1) return { acquired: false, inProgress: true };
+  return { acquired: true };
+}
+
+async function saveCheckoutLease(env: Env, customerId: string, subscriptionId: string, checkoutUrl: string) {
+  await env.DB.prepare("UPDATE razorpay_checkout_attempts SET status='created',subscription_id=?,checkout_url=?,updated_at=?,expires_at=? WHERE customer_id=? AND status='creating'").bind(subscriptionId, checkoutUrl, nowIso(), laterIso(30), customerId).run();
+}
+async function failCheckoutLease(env: Env, customerId: string) {
+  await env.DB.prepare("UPDATE razorpay_checkout_attempts SET status='failed',updated_at=?,expires_at=? WHERE customer_id=? AND status='creating'").bind(nowIso(), nowIso(), customerId).run();
+}
+
 async function createCustomerSubscription(req: Request, env: Env, id: string) {
   const customer = await getSessionCustomer(req, env);
   if (!customer || !customer.active) return json({ error: { code: "UNAUTHORIZED", message: "Valid active Momentum session required", request_id: id } }, 401, { "x-request-id": id });
@@ -132,7 +154,11 @@ async function createCustomerSubscription(req: Request, env: Env, id: string) {
   if (customer.tier === "pro") return json({ error: { code: "ALREADY_PRO", message: "This account already has Pro access", request_id: id } }, 409, { "x-request-id": id });
   const existing = await env.DB.prepare(`SELECT subscription_id,status,is_current FROM razorpay_subscriptions WHERE customer_id=? AND is_current=1 ORDER BY updated_at DESC LIMIT 1`).bind(customer.id).first<{ subscription_id: string; status: string; is_current: number }>();
   if (existing && ["created","authenticated","active","pending","halted","paused"].includes(existing.status)) return json({ error: { code: "SUBSCRIPTION_EXISTS", message: "A Momentum subscription already exists for this account", request_id: id } }, 409, { "x-request-id": id });
-  const auth = btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`);
+
+  const lease = await acquireCheckoutLease(env, customer.id);
+  if (lease.existingUrl) return json({ status: "created", checkout_url: lease.existingUrl, reused: true }, 200, { "x-request-id": id, "cache-control": "no-store" });
+  if (lease.inProgress) return json({ error: { code: "CHECKOUT_IN_PROGRESS", message: "A Pro checkout is already being prepared for this account", request_id: id } }, 409, { "x-request-id": id, "retry-after": "5" });
+
   const payload = {
     plan_id: env.RAZORPAY_PRO_PLAN_ID,
     total_count: 12,
@@ -140,14 +166,28 @@ async function createCustomerSubscription(req: Request, env: Env, id: string) {
     customer_notify: false,
     notes: { momentum_customer_id: customer.id, momentum_tier: "pro", momentum_product: "momentum-api" },
   };
-  const r = await fetch("https://api.razorpay.com/v1/subscriptions", { method: "POST", headers: { authorization: `Basic ${auth}`, "content-type": "application/json" }, body: JSON.stringify(payload) });
-  const data = await r.json<RazorpayResponse>();
-  if (!r.ok || !data.id || !data.short_url) {
-    const detail = data?.error?.description || data?.error?.code || "Razorpay subscription creation failed";
-    return json({ error: { code: "RAZORPAY_CREATE_FAILED", message: detail, request_id: id } }, r.status >= 400 && r.status < 500 ? r.status : 502, { "x-request-id": id });
+  try {
+    const provider = new RazorpayProvider(env.RAZORPAY_KEY_ID, env.RAZORPAY_KEY_SECRET, 8000);
+    const result = await provider.createSubscription(payload);
+    const data: RazorpaySubscriptionResponse = result.data;
+    if (!result.ok || !data.id || !data.short_url) {
+      await failCheckoutLease(env, customer.id);
+      const detail = data?.error?.description || data?.error?.code || (result.status >= 500 ? "Razorpay is temporarily unavailable" : "Razorpay subscription creation failed");
+      return json({ error: { code: "RAZORPAY_CREATE_FAILED", message: detail, request_id: id } }, result.status >= 400 && result.status < 500 ? result.status : 502, { "x-request-id": id });
+    }
+    await saveCheckoutLease(env, customer.id, data.id, data.short_url);
+    try {
+      await storeUnclaimed(env, data.id, null, env.RAZORPAY_PRO_PLAN_ID, "created", null, null, Math.floor(Date.now() / 1000), normalizeEmail(customer.email));
+    } catch (persistError) {
+      console.error("billing checkout persistence failed", { request_id: id, subscription_id: data.id, customer_id: customer.id, error: persistError instanceof Error ? persistError.message : String(persistError) });
+    }
+    return json({ status: "created", subscription_id: data.id, checkout_url: data.short_url }, 201, { "x-request-id": id, "cache-control": "no-store" });
+  } catch (error) {
+    await failCheckoutLease(env, customer.id);
+    const timedOut = error instanceof DOMException && error.name === "AbortError";
+    console.error("Razorpay checkout provider failure", { request_id: id, customer_id: customer.id, timeout: timedOut, error: error instanceof Error ? error.message : String(error) });
+    return json({ error: { code: timedOut ? "RAZORPAY_TIMEOUT" : "RAZORPAY_UNAVAILABLE", message: timedOut ? "Razorpay checkout timed out. Please try again." : "Razorpay checkout is temporarily unavailable. Please try again.", request_id: id } }, 504, { "x-request-id": id, "retry-after": "5" });
   }
-  await storeUnclaimed(env, data.id, null, env.RAZORPAY_PRO_PLAN_ID, "created", null, null, Math.floor(Date.now() / 1000), normalizeEmail(customer.email));
-  return json({ status: "created", subscription_id: data.id, checkout_url: data.short_url }, 201, { "x-request-id": id, "cache-control": "no-store" });
 }
 
 async function claimSubscription(req: Request, env: Env, id: string) {
@@ -174,7 +214,7 @@ export default {
   async fetch(req: Request, env: Env) {
     const id = requestId(), u = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204 });
-    if (u.pathname === "/health" && req.method === "GET") return json({ status: "ok", service: "momentum-billing" }, 200, { "x-request-id": id });
+    if (u.pathname === "/health" && req.method === "GET") return json({ status: "ok", service: "momentum-billing", release: "checkout-idempotency-v2" }, 200, { "x-request-id": id });
     if (u.pathname === "/billing/checkout" && req.method === "POST") return createCustomerSubscription(req, env, id);
     if (u.pathname === "/billing/claim" && req.method === "POST") return claimSubscription(req, env, id);
     if (u.pathname === "/webhooks/razorpay" && req.method === "POST") return webhook(req, env, id);
