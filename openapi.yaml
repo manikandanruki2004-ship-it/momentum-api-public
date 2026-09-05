@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Momentum API
-  version: 1.3.1
+  version: 1.7.0
   description: >-
     Ranks GitHub repositories using developer activity, recency, community,
     popularity, and historical star-growth signals.
@@ -21,11 +21,13 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, service, engine]
+                required: [status, service, engine, billing, auth]
                 properties:
                   status: { type: string, example: ok }
                   service: { type: string, example: momentum-api-public }
                   engine: { type: string, example: service-binding }
+                  billing: { type: string, example: service-binding }
+                  auth: { type: string, example: service-binding }
   /version:
     get:
       security: []
@@ -51,7 +53,7 @@ paths:
             X-Request-Id:
               schema: { type: string }
             X-API-Version:
-              schema: { type: string, example: v1.3.1 }
+              schema: { type: string, example: v1.7.0 }
           content:
             application/json:
               schema:
@@ -64,7 +66,6 @@ paths:
       description: >-
         The public parameter accepts a limit from 1 to 20. The effective maximum
         is additionally constrained by the authenticated customer's plan.
-        Free returns at most 5, Starter at most 10, and Pro at most 20.
       parameters:
         - $ref: '#/components/parameters/Language'
         - $ref: '#/components/parameters/MinStars'
@@ -77,7 +78,7 @@ paths:
             X-Request-Id:
               schema: { type: string }
             X-API-Version:
-              schema: { type: string, example: v1.3.0 }
+              schema: { type: string, example: v1.7.0 }
             X-Query-Cache:
               schema: { type: string, enum: [hit, miss] }
           content:
@@ -90,6 +91,160 @@ paths:
           $ref: '#/components/responses/RateOrQuotaExceeded'
         '502':
           $ref: '#/components/responses/UpstreamError'
+  /billing/health:
+    get:
+      security: []
+      summary: Billing binding health
+      responses:
+        '200':
+          description: Billing worker is reachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceHealthResponse'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+  /auth/health:
+    get:
+      security: []
+      summary: Authentication binding health
+      responses:
+        '200':
+          description: Authentication worker is reachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceHealthResponse'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+  /billing/checkout:
+    post:
+      summary: Create or reuse the authenticated customer's Pro checkout
+      responses:
+        '201':
+          description: New Razorpay checkout created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '200':
+          description: Existing active checkout reused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '504':
+          description: Razorpay timed out
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /billing/status:
+    get:
+      summary: Reconcile the authenticated customer's Razorpay subscription status
+      description: >-
+        Reads the linked Razorpay subscription through the billing provider adapter.
+        Entitlement changes are synchronized only from provider state; a browser
+        redirect is not treated as proof of payment.
+      responses:
+        '200':
+          description: Current provider status and local account state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '504':
+          description: Razorpay status lookup timed out or was temporarily unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /billing/claim:
+    post:
+      summary: Claim a pending Razorpay subscription for the signed-in account
+      responses:
+        '200':
+          description: Subscription linked or activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /auth/config:
+    get:
+      security: []
+      summary: Get public Google sign-in configuration
+      responses:
+        '200':
+          description: Public authentication configuration
+  /auth/google:
+    post:
+      security: []
+      summary: Exchange a Google credential for a Momentum session
+      responses:
+        '200':
+          description: Authenticated session created
+        '400':
+          description: Invalid credential
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          $ref: '#/components/responses/RateOrQuotaExceeded'
+  /auth/me:
+    get:
+      summary: Get authenticated browser account state
+      responses:
+        '200':
+          description: Authenticated account state
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    post:
+      summary: Revoke the authenticated browser session
+      responses:
+        '200':
+          description: Session revoked
+  /webhooks/razorpay:
+    post:
+      security: []
+      summary: Receive and verify Razorpay subscription events
+      description: >-
+        The webhook must contain a valid Razorpay signature and event ID. Event
+        processing is deduplicated and ordered before entitlement changes are applied.
+      responses:
+        '200':
+          description: Event processed
+        '400':
+          description: Malformed or missing event metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Invalid webhook signature
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          description: Event processing failed and should be retried by the provider
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -104,6 +259,7 @@ components:
       required: false
       schema:
         type: string
+        maxLength: 64
       description: Optional GitHub language filter.
     MinStars:
       name: min_stars
@@ -134,6 +290,41 @@ components:
         default: 5
       description: Requested result count; the authenticated plan may impose a lower cap.
   schemas:
+    ServiceHealthResponse:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        service: { type: string }
+        release: { type: string }
+      required: [status, service]
+    CheckoutResponse:
+      type: object
+      required: [status, checkout_url]
+      properties:
+        status: { type: string, example: created }
+        subscription_id: { type: string, example: sub_123abc }
+        checkout_url: { type: string, format: uri, example: https://rzp.io/i/example }
+        reused: { type: boolean }
+    BillingStatusResponse:
+      type: object
+      required: [status, tier, active, synchronized, request_id]
+      properties:
+        status: { type: string, example: active }
+        subscription_id: { type: string }
+        razorpay_customer_id: { type: [string, 'null'] }
+        tier: { type: string, enum: [free, pro] }
+        active: { type: boolean }
+        synchronized: { type: boolean }
+        request_id: { type: string }
+    ClaimResponse:
+      type: object
+      required: [status, customer_id, subscription_id, tier, active]
+      properties:
+        status: { type: string, enum: [activated, linked] }
+        customer_id: { type: string }
+        subscription_id: { type: string }
+        tier: { type: string, example: pro }
+        active: { type: boolean }
     MomentumResponse:
       type: object
       required: [data, meta]
@@ -248,14 +439,16 @@ components:
             request_id: { type: string }
     VersionResponse:
       type: object
-      required: [name, version, engine]
+      required: [name, version, engine, billing, auth]
       properties:
         name: { type: string, example: Momentum API }
-        version: { type: string, example: 1.3.1 }
+        version: { type: string, example: 1.7.0 }
         engine: { type: string, example: 1.3.1 }
+        billing: { type: string, example: 1.3.1 }
+        auth: { type: string, example: 1.2.0 }
   responses:
     Unauthorized:
-      description: API key missing or invalid
+      description: API key or browser session missing or invalid
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -265,7 +458,17 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     UpstreamError:
-      description: GitHub upstream unavailable
+      description: Upstream dependency unavailable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Request conflicts with current account or subscription state
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Requested subscription or resource was not found
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
