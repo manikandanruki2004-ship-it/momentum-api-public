@@ -59,6 +59,7 @@ D1 stores relational business state. Migrations are the only schema-change mecha
 5. Terminal billing events remove the paid entitlement.
 6. The browser never receives secrets, internal stack traces, or database details.
 7. A deployment is not considered healthy until each service binding and each critical public route has passed smoke verification.
+8. Production runtime secrets are owned and synchronized by the primary deployment workflow; post-deploy secret mutation is not part of the normal release path.
 
 ## 5. Billing state machine
 
