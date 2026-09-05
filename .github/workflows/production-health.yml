@@ -18,10 +18,11 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 2 "$BASE/health" | tee /tmp/gateway.json
+          request() { curl --connect-timeout 10 --max-time 30 --silent --show-error --retry 3 --retry-delay 2 "$@"; }
+          request "$BASE/health" | tee /tmp/gateway.json
           jq -e '.status == "ok" and .service == "momentum-api-public"' /tmp/gateway.json >/dev/null
           for header in strict-transport-security x-content-type-options referrer-policy permissions-policy; do
-            curl --fail --silent --show-error --head --retry 3 --retry-delay 2 "$BASE/health" | tr -d '\r' | grep -i "^${header}:" >/dev/null
+            request --head "$BASE/health" | tr -d '\r' | grep -i "^${header}:" >/dev/null
           done
 
       - name: Check billing service binding
@@ -29,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-          STATUS="$(curl --silent --show-error --output /tmp/billing.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/billing/health")"
+          STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/billing.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/billing/health")"
           test "$STATUS" = "200"
           jq -e '.status == "ok" and .service == "momentum-billing"' /tmp/billing.json >/dev/null
 
@@ -38,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-          STATUS="$(curl --silent --show-error --output /tmp/auth-binding.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/auth/health")"
+          STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/auth-binding.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/auth/health")"
           test "$STATUS" = "200"
           jq -e '.status == "ok" and .service == "momentum-auth"' /tmp/auth-binding.json >/dev/null
 
@@ -47,18 +48,44 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-          STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/auth/me")"
+          for path in /auth/me /v1/me /billing/status; do
+            STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/boundary.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE$path")"
+            test "$STATUS" = "401"
+            jq -e '.error.code == "UNAUTHORIZED" and (.error.request_id | type == "string" and length > 0)' /tmp/boundary.json >/dev/null
+          done
+          STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/live.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/v1/momentum")"
           test "$STATUS" = "401"
-          jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
-          STATUS="$(curl --silent --show-error --output /tmp/live.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/v1/momentum")"
-          test "$STATUS" = "401"
-          jq -e '.error.code == "UNAUTHORIZED"' /tmp/live.json >/dev/null
+          jq -e '.error.code == "UNAUTHORIZED" and (.error.request_id | type == "string" and length > 0)' /tmp/live.json >/dev/null
 
-      - name: Check query validation
+      - name: Check method and query validation
         shell: bash
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-          STATUS="$(curl --silent --show-error --output /tmp/query.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/v1/momentum?min_stars=-1")"
+          STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/query.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/v1/momentum?min_stars=-1")"
           test "$STATUS" = "400"
-          jq -e '.error.code == "INVALID_QUERY"' /tmp/query.json >/dev/null
+          jq -e '.error.code == "INVALID_QUERY" and (.error.request_id | type == "string" and length > 0)' /tmp/query.json >/dev/null
+          STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/method.json --write-out '%{http_code}' --retry 3 --retry-delay 2 -X PUT "$BASE/health")"
+          test "$STATUS" = "405"
+          jq -e '.error.code == "METHOD_NOT_ALLOWED" and (.error.request_id | type == "string" and length > 0)' /tmp/method.json >/dev/null
+
+      - name: Check webhook protection
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
+          STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/webhook.json --write-out '%{http_code}' --retry 3 --retry-delay 2 -X POST "$BASE/webhooks/razorpay" -H 'Content-Type: application/json' -d '{}')"
+          test "$STATUS" = "401" -o "$STATUS" = "503"
+          jq -e '(.error.code == "INVALID_SIGNATURE" or .error.code == "BILLING_NOT_CONFIGURED") and (.error.request_id | type == "string" and length > 0)' /tmp/webhook.json >/dev/null
+
+      - name: Check hosted checkout contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
+          HEADERS=/tmp/checkout-headers.txt
+          curl --connect-timeout 10 --max-time 30 --silent --show-error --dump-header "$HEADERS" --output /dev/null --max-redirs 0 --retry 3 --retry-delay 2 "$BASE/billing/checkout" || true
+          STATUS="$(awk 'NR==1 {print $2}' "$HEADERS")"
+          test "$STATUS" = "302"
+          grep -i '^location: https://\(rzp.io\|pages.razorpay.com\)/' "$HEADERS" >/dev/null
+          grep -i '^cache-control: no-store' "$HEADERS" >/dev/null
