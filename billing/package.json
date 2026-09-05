@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test test/provider.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260827.1",
