@@ -11,6 +11,10 @@ export type RazorpaySubscriptionResponse = {
   short_url?: string;
   status?: string;
   plan_id?: string;
+  customer_id?: string | null;
+  current_start?: number | null;
+  current_end?: number | null;
+  ended_at?: number | null;
   error?: { code?: string; description?: string };
 };
 
@@ -22,6 +26,7 @@ export type ProviderResult = {
 
 export interface BillingProvider {
   createSubscription(payload: RazorpaySubscriptionPayload): Promise<ProviderResult>;
+  getSubscription(subscriptionId: string): Promise<ProviderResult>;
 }
 
 export class RazorpayProvider implements BillingProvider {
@@ -32,18 +37,19 @@ export class RazorpayProvider implements BillingProvider {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  async createSubscription(payload: RazorpaySubscriptionPayload): Promise<ProviderResult> {
+  private async request(url: string, init: RequestInit): Promise<ProviderResult> {
     const auth = btoa(`${this.keyId}:${this.keySecret}`);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await this.fetchImpl("https://api.razorpay.com/v1/subscriptions", {
-        method: "POST",
+      const response = await this.fetchImpl(url, {
+        ...init,
         headers: {
           authorization: `Basic ${auth}`,
+          accept: "application/json",
           "content-type": "application/json",
+          ...(init.headers ?? {}),
         },
-        body: JSON.stringify(payload),
         signal: controller.signal,
       });
       let data: RazorpaySubscriptionResponse = {};
@@ -56,5 +62,21 @@ export class RazorpayProvider implements BillingProvider {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async createSubscription(payload: RazorpaySubscriptionPayload): Promise<ProviderResult> {
+    return this.request("https://api.razorpay.com/v1/subscriptions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getSubscription(subscriptionId: string): Promise<ProviderResult> {
+    if (!/^sub_[A-Za-z0-9]+$/.test(subscriptionId)) {
+      return { ok: false, status: 400, data: { error: { code: "INVALID_SUBSCRIPTION_ID", description: "Invalid subscription id" } } };
+    }
+    return this.request(`https://api.razorpay.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+      method: "GET",
+    });
   }
 }
