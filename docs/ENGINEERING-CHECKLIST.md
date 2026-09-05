@@ -38,6 +38,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Lookup-heavy billing paths have indexes.
 - [ ] Audit the private engine for N+1 access patterns.
 - [x] NoSQL is not introduced without a demonstrated document-shaped requirement.
+- [x] Deployment syncs the latest public D1 migrations into the private engine checkout before applying remote migrations.
 
 ## Security
 
@@ -91,6 +92,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Add integration-style health checks for binding-to-service paths.
 - [x] Add Playwright browser smoke coverage for the public demo and critical anonymous boundaries.
 - [x] CI/CD deployment exists.
+- [x] Deployment smoke tests verify gateway version plus direct billing/auth binding health.
 - [x] Post-deploy production release gate verifies the deployed gateway, bindings, security headers, protected routes, and browser bundle.
 - [x] Production health endpoints exist for the gateway, billing, and auth services.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
