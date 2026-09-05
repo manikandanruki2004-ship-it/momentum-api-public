@@ -25,6 +25,10 @@ const gateway = readFileSync("worker/src/index.ts", "utf8");
 const provider = readFileSync("billing/src/provider.ts", "utf8");
 const openapi = readFileSync("openapi.yaml", "utf8");
 
+const gatewayVersion = gateway.match(/version:\"([^\"]+)\".*?engine:\"([^\"]+)\".*?billing:\"([^\"]+)\".*?auth:\"([^\"]+)\"/s);
+if (!gatewayVersion) throw new Error("Gateway version contract is missing");
+const [, apiVersion, engineVersion, billingVersion, authVersion] = gatewayVersion;
+
 const assertions = [
   [index.includes("window.location.href=u.href"), "checkout must navigate directly to the validated Razorpay URL"],
   [index.includes("https://momentum-api-public.manikandanruki2004.workers.dev"), "demo must target the production gateway"],
@@ -36,11 +40,11 @@ const assertions = [
   [billing.includes("/billing/status") && billing.includes("provider.getSubscription(sid)"), "authenticated billing status reconciliation missing"],
   [gateway.includes("/billing/status") && gateway.includes("isBillingStatus") && gateway.includes("binding=env.BILLING"), "gateway must route billing status to the billing service"],
   [openapi.includes("  /billing/status:"), "OpenAPI must document billing status"],
-  [openapi.includes("version: 1.7.0") && openapi.includes("engine: 1.3.1") && openapi.includes("billing: 1.3.1") && openapi.includes("auth: 1.2.0"), "OpenAPI version contract must match deployed service versions"],
+  [openapi.includes(`version: ${apiVersion}`) && openapi.includes(`engine: ${engineVersion}`) && openapi.includes(`billing: ${billingVersion}`) && openapi.includes(`auth: ${authVersion}`), "OpenAPI version contract must match the gateway contract"],
 ];
 
 for (const [ok, message] of assertions) {
   if (!ok) throw new Error(message);
 }
 
-console.log("Momentum engineering contract checks passed.");
+console.log(`Momentum engineering contract checks passed (API ${apiVersion}, engine ${engineVersion}, billing ${billingVersion}, auth ${authVersion}).`);
