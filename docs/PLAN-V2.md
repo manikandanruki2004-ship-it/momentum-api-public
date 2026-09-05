@@ -24,6 +24,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 12. Do not automatically retry Razorpay subscription creation because it is a remote mutation; retries are reserved for reads or operations with proven idempotency.
 13. Allow an authenticated customer to refresh provider subscription state, while keeping verified webhooks authoritative for normal entitlement processing.
 14. Keep the public API documentation synchronized with the actual gateway and billing route surface.
+15. Keep retry behavior inside the provider adapter so route logic cannot accidentally retry a remote mutation.
 
 ## Delivery phases
 
@@ -65,7 +66,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 ### Phase E — reliability/performance
 
 - [x] Razorpay and critical binding/provider calls have bounded timeouts.
-- [ ] Add safe retry-with-backoff where justified, limited to idempotent reads/operations.
+- [x] Add safe retry-with-backoff only to the idempotent Razorpay subscription read path, with a small capped attempt budget.
 - [ ] Add circuit breaking around repeatedly failing external dependencies.
 - [ ] Make remaining shared-state updates atomic.
 - [ ] Audit rate limiting per user and per IP.
@@ -80,6 +81,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - [x] Add a post-deploy production release gate for binding/security/browser checks.
 - [ ] Add centralized error tracking and standardized structured JSON logging.
 - [x] Synchronize public API documentation with the current gateway/billing contract.
+- [x] Add provider tests proving transient reads retry while remote mutations do not.
 
 ## Acceptance criteria
 
@@ -90,5 +92,6 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - Razorpay webhook events are verified, deduplicated, ordered, and reconcile the correct Momentum account.
 - Pro access is never granted merely because a browser was redirected.
 - An authenticated customer can request a bounded provider status refresh without bypassing webhook authorization rules.
+- Provider retries are constrained to idempotent reads and cannot silently turn subscription creation into a retried mutation.
 - Billing or engine dependency failure produces a safe user message and searchable diagnostics.
 - A failed validation or health gate blocks release.
