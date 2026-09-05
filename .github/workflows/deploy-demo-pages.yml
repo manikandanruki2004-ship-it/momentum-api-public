@@ -39,3 +39,15 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify deployed demo
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAGE="https://therandomhuman-hub.github.io/momentum-api-public/"
+          curl --fail-with-body --silent --show-error --retry 8 --retry-delay 5 "$PAGE" -o /tmp/page.html
+          grep -q 'Momentum API' /tmp/page.html
+          grep -q 'Run a momentum scan' /tmp/page.html
+          grep -q 'Upgrade' /tmp/page.html
+          grep -q 'Opening secure Razorpay checkout' /tmp/page.html
+          echo "GitHub Pages demo smoke check passed."
