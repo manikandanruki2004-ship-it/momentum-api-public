@@ -27,6 +27,42 @@ test("RazorpayProvider returns parsed successful responses", async () => {
   assert.equal(result.data.short_url, "https://rzp.io/rzp/test");
 });
 
+test("RazorpayProvider fetches an existing subscription through the adapter", async () => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async (url, init) => {
+    assert.equal(url, "https://api.razorpay.com/v1/subscriptions/sub_test");
+    assert.equal(init?.method, "GET");
+    return new Response(JSON.stringify({
+      id: "sub_test",
+      status: "active",
+      plan_id: "plan_test",
+      customer_id: "cust_rzp_test",
+      current_start: 1760000000,
+      current_end: 1762678400,
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+
+  const result = await provider.getSubscription("sub_test");
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 200);
+  assert.equal(result.data.id, "sub_test");
+  assert.equal(result.data.status, "active");
+  assert.equal(result.data.customer_id, "cust_rzp_test");
+});
+
+test("RazorpayProvider rejects malformed subscription ids before network access", async () => {
+  let called = false;
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async () => {
+    called = true;
+    return new Response("should not be called", { status: 500 });
+  });
+
+  const result = await provider.getSubscription("https://attacker.example/sub_test");
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 400);
+  assert.equal(result.data.error?.code, "INVALID_SUBSCRIPTION_ID");
+  assert.equal(called, false);
+});
+
 test("RazorpayProvider preserves provider failures", async () => {
   const provider = new RazorpayProvider("rzp_test", "secret", 1000, async () => {
     return new Response(JSON.stringify({ error: { code: "BAD_REQUEST", description: "invalid plan" } }), {
