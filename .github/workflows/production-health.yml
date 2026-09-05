@@ -18,34 +18,36 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-
-          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 2 \
-            "$BASE/health" | tee /tmp/gateway.json
-          jq -e '.status == "ok" and .service == "momentum-api-public"' /tmp/gateway.json >/dev/null
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 2 -D /tmp/gateway.headers "$BASE/health" | tee /tmp/gateway.json
+          jq -e '.status == "ok" and .service == "momentum-api-public" and .billing == "service-binding" and .auth == "service-binding"' /tmp/gateway.json >/dev/null
+          grep -iq '^strict-transport-security:' /tmp/gateway.headers
 
       - name: Check billing service binding
         shell: bash
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-
-          STATUS="$(curl --silent --show-error --output /tmp/billing.json --write-out '%{http_code}' \
-            --retry 3 --retry-delay 2 "$BASE/billing/health")"
+          STATUS="$(curl --silent --show-error --output /tmp/billing.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/billing/health")"
           test "$STATUS" = "200"
           jq -e '.status == "ok" and .service == "momentum-billing"' /tmp/billing.json >/dev/null
+
+      - name: Check auth service binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
+          STATUS="$(curl --silent --show-error --output /tmp/auth-config.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/auth/config")"
+          test "$STATUS" = "200"
+          jq -e '.google_client_id | strings | length > 0' /tmp/auth-config.json >/dev/null
 
       - name: Check unauthenticated boundaries
         shell: bash
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-
-          STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' \
-            --retry 3 --retry-delay 2 "$BASE/auth/me")"
+          STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/auth/me")"
           test "$STATUS" = "401"
-          jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
-
-          STATUS="$(curl --silent --show-error --output /tmp/live.json --write-out '%{http_code}' \
-            --retry 3 --retry-delay 2 "$BASE/v1/momentum")"
+          jq -e '.error.code == "UNAUTHORIZED" and (.error.request_id | strings | length > 0)' /tmp/me.json >/dev/null
+          STATUS="$(curl --silent --show-error --output /tmp/live.json --write-out '%{http_code}' --retry 3 --retry-delay 2 "$BASE/v1/momentum")"
           test "$STATUS" = "401"
-          jq -e '.error.code == "UNAUTHORIZED"' /tmp/live.json >/dev/null
+          jq -e '.error.code == "UNAUTHORIZED" and (.error.request_id | strings | length > 0)' /tmp/live.json >/dev/null
