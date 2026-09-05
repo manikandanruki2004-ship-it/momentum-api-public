@@ -55,12 +55,14 @@ This is the implementation checklist derived from the supplied engineering-block
 ## Reliability
 
 - [x] Provider failures are translated into safe user errors.
-- [ ] Add shared bounded timeout helpers for outbound `fetch` calls.
+- [x] Razorpay subscription creation has an 8-second provider timeout.
+- [ ] Add shared bounded timeout helpers for all other outbound `fetch` calls.
 - [ ] Add retry-with-backoff only to safe/idempotent provider reads and mutations.
 - [ ] Add a small circuit-breaker abstraction for repeatedly failing external dependencies.
 - [x] Provider event IDs are used for webhook deduplication.
 - [x] Checkout persistence failure cannot hide a successfully created Razorpay checkout URL.
-- [ ] Audit shared-state updates for races and make read/modify/write sequences atomic.
+- [x] Concurrent checkout attempts use a D1-backed per-customer lease and can reuse an existing checkout URL.
+- [ ] Audit remaining shared-state updates for races and make read/modify/write sequences atomic.
 
 ## Performance
 
@@ -93,8 +95,8 @@ This is the implementation checklist derived from the supplied engineering-block
 
 ## Provider abstraction
 
-- [ ] Create a `BillingProvider` interface.
-- [ ] Implement Razorpay behind that interface.
+- [x] Create a `BillingProvider` interface.
+- [x] Implement Razorpay behind the provider interface.
 - [x] Keep provider URLs out of presentation logic except for the validated hosted checkout destination.
 - [ ] Make provider failover possible without changing the public API contract.
 
