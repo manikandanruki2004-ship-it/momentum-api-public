@@ -57,13 +57,14 @@ async function storeUnclaimed(env: Env, sid: string, rpc: string | null, pid: st
 async function attachSubscription(env: Env, sid: string, customerId: string, status: string, start: number | null | undefined, end: number | null | undefined, created: number, eventId: string, razorpayCustomerId: string | null, grantAccess: boolean) {
   const existing = await env.DB.prepare("SELECT customer_id,is_current,last_event_created_at FROM razorpay_subscriptions WHERE subscription_id=? LIMIT 1").bind(sid).first<{ customer_id: string; is_current: number; last_event_created_at: number | null }>();
   if (existing && created > 0 && existing.last_event_created_at != null && created < existing.last_event_created_at) return existing.customer_id;
+  const stamp = nowIso();
   await env.DB.batch([
     env.DB.prepare("UPDATE razorpay_subscriptions SET is_current=0 WHERE customer_id=? AND is_current=1 AND subscription_id<>?").bind(customerId, sid),
-    env.DB.prepare(`INSERT INTO razorpay_subscriptions(subscription_id,customer_id,razorpay_customer_id,plan_id,tier,status,current_start,current_end,created_at,updated_at,last_event_created_at,is_current,suspended_at,ended_at,last_event_id) SELECT ?,?,u.razorpay_customer_id,u.plan_id,'pro',?,?,?,?,COALESCE(u.last_event_created_at,?),1,?,?,? FROM razorpay_unclaimed_subscriptions u WHERE u.subscription_id=? ON CONFLICT(subscription_id) DO UPDATE SET customer_id=excluded.customer_id,razorpay_customer_id=COALESCE(excluded.razorpay_customer_id,razorpay_subscriptions.razorpay_customer_id),plan_id=excluded.plan_id,tier='pro',status=excluded.status,current_start=COALESCE(excluded.current_start,razorpay_subscriptions.current_start),current_end=COALESCE(excluded.current_end,razorpay_subscriptions.current_end),updated_at=excluded.updated_at,last_event_created_at=COALESCE(excluded.last_event_created_at,razorpay_subscriptions.last_event_created_at),is_current=1,suspended_at=excluded.suspended_at,ended_at=excluded.ended_at,last_event_id=excluded.last_event_id`).bind(sid, customerId, status, start ?? null, end ?? null, nowIso(), nowIso(), created || null, grantAccess ? null : nowIso(), null, eventId, sid),
+    env.DB.prepare(`INSERT INTO razorpay_subscriptions(subscription_id,customer_id,razorpay_customer_id,plan_id,tier,status,current_start,current_end,created_at,updated_at,last_event_created_at,is_current,suspended_at,ended_at,last_event_id) SELECT ?,?,u.razorpay_customer_id,u.plan_id,'pro',?,?,?,?,COALESCE(u.last_event_created_at,?),1,?,?,? FROM razorpay_unclaimed_subscriptions u WHERE u.subscription_id=? ON CONFLICT(subscription_id) DO UPDATE SET customer_id=excluded.customer_id,razorpay_customer_id=COALESCE(excluded.razorpay_customer_id,razorpay_subscriptions.razorpay_customer_id),plan_id=excluded.plan_id,tier='pro',status=excluded.status,current_start=COALESCE(excluded.current_start,razorpay_subscriptions.current_start),current_end=COALESCE(excluded.current_end,razorpay_subscriptions.current_end),updated_at=excluded.updated_at,last_event_created_at=COALESCE(excluded.last_event_created_at,razorpay_subscriptions.last_event_created_at),is_current=1,suspended_at=excluded.suspended_at,ended_at=excluded.ended_at,last_event_id=excluded.last_event_id`).bind(sid, customerId, status, start ?? null, end ?? null, stamp, stamp, created || null, grantAccess ? null : stamp, null, eventId, sid),
+    env.DB.prepare("UPDATE razorpay_unclaimed_subscriptions SET is_claimed=1,claimed_customer_id=?,claimed_at=?,updated_at=? WHERE subscription_id=? AND is_claimed=0").bind(customerId, stamp, stamp, sid),
+    ...(grantAccess ? [env.DB.prepare(`UPDATE customers SET tier='pro',monthly_quota=(SELECT monthly_quota FROM plans WHERE tier='pro' AND active=1),rate_limit_per_minute=(SELECT rate_limit_per_minute FROM plans WHERE tier='pro' AND active=1),active=1 WHERE id=?`).bind(customerId)] : []),
+    ...(razorpayCustomerId ? [env.DB.prepare("UPDATE razorpay_subscriptions SET razorpay_customer_id=? WHERE subscription_id=?").bind(razorpayCustomerId, sid)] : []),
   ]);
-  await env.DB.prepare("UPDATE razorpay_unclaimed_subscriptions SET is_claimed=1,claimed_customer_id=?,claimed_at=?,updated_at=? WHERE subscription_id=? AND is_claimed=0").bind(customerId, nowIso(), nowIso(), sid).run();
-  if (grantAccess) await syncPro(env, customerId, true);
-  if (razorpayCustomerId) await env.DB.prepare("UPDATE razorpay_subscriptions SET razorpay_customer_id=? WHERE subscription_id=?").bind(razorpayCustomerId, sid).run();
   return customerId;
 }
 
@@ -82,11 +83,19 @@ async function processEvent(env: Env, eventId: string, event: Event) {
   if (existing) {
     if (eventCreated > 0 && existing.last_event_created_at != null && eventCreated < existing.last_event_created_at) { await markEvent(env, eventId, "ignored"); return; }
     const current = existing.is_current === 1;
-    await env.DB.prepare(`UPDATE razorpay_subscriptions SET plan_id=?,tier=?,status=?,current_start=COALESCE(?,current_start),current_end=COALESCE(?,current_end),updated_at=?,last_event_created_at=?,suspended_at=?,ended_at=?,last_event_id=? WHERE subscription_id=?`).bind(pid, tier, status, s.current_start ?? null, s.current_end ?? null, nowIso(), eventCreated || null, isSuspendEvent(et) ? nowIso() : null, isTerminalEvent(et) ? (s.ended_at ?? Math.floor(Date.now() / 1000)) : null, eventId, sid).run();
-    if (current && isSuspendEvent(et)) await syncPro(env, existing.customer_id, false);
-    if (current && isActiveEvent(et, status)) await syncPro(env, existing.customer_id, true);
-    if (current && isTerminalEvent(et)) { await env.DB.prepare("UPDATE razorpay_subscriptions SET is_current=0 WHERE subscription_id=?").bind(sid).run(); await syncFree(env, existing.customer_id); }
-    await markEvent(env, eventId, "processed"); return;
+    const stamp = nowIso();
+    const updates = [
+      env.DB.prepare(`UPDATE razorpay_subscriptions SET plan_id=?,tier=?,status=?,current_start=COALESCE(?,current_start),current_end=COALESCE(?,current_end),updated_at=?,last_event_created_at=?,suspended_at=?,ended_at=?,last_event_id=? WHERE subscription_id=?`).bind(pid, tier, status, s.current_start ?? null, s.current_end ?? null, stamp, eventCreated || null, isSuspendEvent(et) ? stamp : null, isTerminalEvent(et) ? (s.ended_at ?? Math.floor(Date.now() / 1000)) : null, eventId, sid),
+    ];
+    if (current && isSuspendEvent(et)) updates.push(env.DB.prepare(`UPDATE customers SET tier='pro',monthly_quota=(SELECT monthly_quota FROM plans WHERE tier='pro' AND active=1),rate_limit_per_minute=(SELECT rate_limit_per_minute FROM plans WHERE tier='pro' AND active=1),active=0 WHERE id=?`).bind(existing.customer_id));
+    if (current && isActiveEvent(et, status)) updates.push(env.DB.prepare(`UPDATE customers SET tier='pro',monthly_quota=(SELECT monthly_quota FROM plans WHERE tier='pro' AND active=1),rate_limit_per_minute=(SELECT rate_limit_per_minute FROM plans WHERE tier='pro' AND active=1),active=1 WHERE id=?`).bind(existing.customer_id));
+    if (current && isTerminalEvent(et)) {
+      updates.push(env.DB.prepare("UPDATE razorpay_subscriptions SET is_current=0 WHERE subscription_id=?").bind(sid));
+      updates.push(env.DB.prepare(`UPDATE customers SET tier='free',monthly_quota=(SELECT monthly_quota FROM plans WHERE tier='free' AND active=1),rate_limit_per_minute=(SELECT rate_limit_per_minute FROM plans WHERE tier='free' AND active=1),active=1 WHERE id=?`).bind(existing.customer_id));
+    }
+    updates.push(env.DB.prepare("UPDATE razorpay_webhook_events SET status=?,processed_at=?,error_message=NULL WHERE event_id=?").bind("processed", stamp, eventId));
+    await env.DB.batch(updates);
+    return;
   }
   await storeUnclaimed(env, sid, s.customer_id ? String(s.customer_id) : null, pid, status, s.current_start, s.current_end, eventCreated, payerEmail);
   const grant = isActiveEvent(et, status);
