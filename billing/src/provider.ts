@@ -37,31 +37,42 @@ export class RazorpayProvider implements BillingProvider {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  private async request(url: string, init: RequestInit): Promise<ProviderResult> {
+  private async request(url: string, init: RequestInit, retryableRead = false): Promise<ProviderResult> {
     const auth = btoa(`${this.keyId}:${this.keySecret}`);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const response = await this.fetchImpl(url, {
-        ...init,
-        headers: {
-          authorization: `Basic ${auth}`,
-          accept: "application/json",
-          "content-type": "application/json",
-          ...(init.headers ?? {}),
-        },
-        signal: controller.signal,
-      });
-      let data: RazorpaySubscriptionResponse = {};
+    const maxAttempts = retryableRead ? 3 : 1;
+    let lastResult: ProviderResult = { ok: false, status: 503, data: { error: { code: "PROVIDER_UNAVAILABLE" } } };
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        data = await response.json() as RazorpaySubscriptionResponse;
-      } catch {
-        data = {};
+        const response = await this.fetchImpl(url, {
+          ...init,
+          headers: {
+            authorization: `Basic ${auth}`,
+            accept: "application/json",
+            "content-type": "application/json",
+            ...(init.headers ?? {}),
+          },
+          signal: controller.signal,
+        });
+        let data: RazorpaySubscriptionResponse = {};
+        try {
+          data = await response.json() as RazorpaySubscriptionResponse;
+        } catch {
+          data = {};
+        }
+        lastResult = { ok: response.ok, status: response.status, data };
+        if (!retryableRead || response.ok || (response.status !== 429 && response.status < 500) || attempt === maxAttempts - 1) return lastResult;
+      } finally {
+        clearTimeout(timer);
       }
-      return { ok: response.ok, status: response.status, data };
-    } finally {
-      clearTimeout(timer);
+
+      const delayMs = Math.min(400, 100 * 2 ** attempt);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
+
+    return lastResult;
   }
 
   async createSubscription(payload: RazorpaySubscriptionPayload): Promise<ProviderResult> {
@@ -77,6 +88,6 @@ export class RazorpayProvider implements BillingProvider {
     }
     return this.request(`https://api.razorpay.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, {
       method: "GET",
-    });
+    }, true);
   }
 }
