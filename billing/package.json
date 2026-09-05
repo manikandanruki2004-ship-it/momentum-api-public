@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test test/provider.test.ts"
+    "test": "node --import tsx --test test/**/*.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260827.1",
+    "tsx": "4.20.3",
     "typescript": "5.9.2",
     "wrangler": "4.125.0"
   }
