@@ -68,6 +68,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Concurrent checkout attempts use a D1-backed per-customer lease and can reuse an existing checkout URL.
 - [ ] Audit remaining shared-state updates for races and make read/modify/write sequences atomic.
 - [x] Authenticated customers can request a bounded Razorpay subscription status refresh through `/billing/status`.
+- [x] Production billing secrets are synchronized by the primary deployment workflow instead of a separate autonomous repair workflow.
 
 ## Performance
 
@@ -120,7 +121,6 @@ Open site
   -> Run live query
   -> Click Upgrade
   -> Obtain real Razorpay checkout URL
-  -> Navigate to hosted checkout
   -> Complete/exit authorization
   -> Return to Momentum
   -> Refresh account state
