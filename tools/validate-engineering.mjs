@@ -25,9 +25,15 @@ const gateway = readFileSync("worker/src/index.ts", "utf8");
 const provider = readFileSync("billing/src/provider.ts", "utf8");
 const openapi = readFileSync("openapi.yaml", "utf8");
 
-const gatewayVersion = gateway.match(/version:\"([^\"]+)\".*?engine:\"([^\"]+)\".*?billing:\"([^\"]+)\".*?auth:\"([^\"]+)\"/s);
-if (!gatewayVersion) throw new Error("Gateway version contract is missing");
-const [, apiVersion, engineVersion, billingVersion, authVersion] = gatewayVersion;
+const versionBlock = gateway.match(/url\.pathname===\"\/version\"\)return json\([^;]+/s)?.[0] ?? gateway;
+const readVersion = (name) => versionBlock.match(new RegExp(`${name}\\s*:\\s*\\\"([^\\\"]+)\\\"`))?.[1] ?? null;
+const apiVersion = readVersion("version");
+const engineVersion = readVersion("engine");
+const billingVersion = readVersion("billing");
+const authVersion = readVersion("auth");
+if (!apiVersion || !engineVersion || !billingVersion || !authVersion) {
+  throw new Error("Gateway version contract is missing");
+}
 
 const assertions = [
   [index.includes("window.location.href=u.href"), "checkout must navigate directly to the validated Razorpay URL"],
