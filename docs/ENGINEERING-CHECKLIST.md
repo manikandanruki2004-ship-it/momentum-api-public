@@ -34,10 +34,11 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Relational billing/customer state uses D1.
 - [x] Schema changes are represented as ordered migrations.
 - [x] Multi-record entitlement transitions use D1 atomic batches where the transition requires consistency.
+- [x] D1 entitlement triggers derive customer paid/free state from the subscription source of truth.
 - [x] Lookup-heavy billing paths have indexes.
 - [ ] Audit the private engine for N+1 access patterns.
 - [x] NoSQL is not introduced without a demonstrated document-shaped requirement.
-- [x] Deployment syncs the latest public D1 migrations into the private engine checkout before applying remote migrations.
+- [x] Billing entitlement migrations are maintained in both public and private engine migration trees.
 
 ## Security
 
@@ -64,7 +65,8 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Razorpay read failures now open a small bounded circuit breaker before repeated dependency calls continue.
 - [x] The read circuit allows only one half-open probe after cooldown, preventing a dependency recovery stampede.
 - [x] Provider event IDs are used for webhook deduplication.
-- [x] Webhook subscription status and entitlement updates are committed atomically for existing subscriptions.
+- [x] Existing-subscription webhook status and entitlement updates are committed atomically.
+- [x] New-subscription attachment uses an atomic subscription/customer transition and D1 entitlement triggers provide a database-level consistency guard.
 - [x] Checkout persistence failure cannot hide a successfully created Razorpay checkout URL.
 - [x] Concurrent checkout attempts use a D1-backed per-customer lease and can reuse an existing checkout URL.
 - [ ] Audit remaining shared-state updates for races and make read/modify/write sequences atomic.
@@ -104,7 +106,8 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Production health endpoints exist for the gateway, billing, and auth services.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
 - [x] Release contract validates the billing status route and gateway routing.
-- [x] CI validates the gateway rate-limit contract and migration synchronization.
+- [x] CI validates the gateway rate-limit contract, webhook atomicity, and ordered D1 migration contract.
+- [x] Production D1 migration runner is pinned, serialized, and validates the migration sequence before execution.
 - [x] Provider tests validate circuit opening after repeated read failures.
 - [x] Provider tests validate single-probe recovery behavior after circuit cooldown.
 
