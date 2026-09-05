@@ -87,7 +87,7 @@ This is the implementation checklist derived from the supplied engineering-block
 
 - [x] Typechecks run for core Workers during CI/deployment.
 - [x] Engineering-contract checks run in CI.
-- [ ] Add unit tests for billing state transitions and request validation.
+- [x] Billing provider unit tests cover success, provider failure, and timeout behavior.
 - [x] Add integration-style health checks for binding-to-service paths.
 - [x] Add Playwright browser smoke coverage for the public demo and critical anonymous boundaries.
 - [x] CI/CD deployment exists.
