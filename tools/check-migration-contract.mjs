@@ -23,21 +23,24 @@ const required = [
   ['0017_auth_rate_limit.sql', 'auth rate-limit migration'],
   ['0018_billing_entitlement_sync_triggers.sql', 'billing entitlement trigger migration'],
   ['0019_rebuild_billing_entitlement_sync_triggers.sql', 'billing entitlement trigger rebuild migration'],
+  ['0020_rebuild_billing_entitlement_active_state.sql', 'billing entitlement active-state repair migration'],
 ];
 
 for (const [name, description] of required) {
   if (!files.includes(name)) throw new Error(`Missing ${description}: ${name}`);
 }
 
-const triggerMigration = fs.readFileSync(`${dir}/0019_rebuild_billing_entitlement_sync_triggers.sql`, 'utf8');
+const triggerMigration = fs.readFileSync(`${dir}/0020_rebuild_billing_entitlement_active_state.sql`, 'utf8');
 for (const needle of [
   'DROP TRIGGER IF EXISTS trg_sync_customer_entitlement_insert',
   'CREATE TRIGGER IF NOT EXISTS trg_sync_customer_entitlement_insert',
   'CREATE TRIGGER IF NOT EXISTS trg_sync_customer_entitlement_update',
   'CREATE TRIGGER IF NOT EXISTS trg_sync_customer_entitlement_delete',
   "status IN ('active','pending','halted','paused')",
+  "status = 'active'",
+  "THEN 0",
 ]) {
-  if (!triggerMigration.includes(needle)) throw new Error(`Entitlement trigger contract missing: ${needle}`);
+  if (!triggerMigration.includes(needle)) throw new Error(`Entitlement active-state contract missing: ${needle}`);
 }
 
 console.log(`D1 migration contract passed (${files.length} migrations, baseline ${files[0].slice(0, 4)}).`);
