@@ -1,25 +1,34 @@
 import fs from 'node:fs';
 
 const gateway = fs.readFileSync('worker/src/index.ts', 'utf8');
+const config = fs.readFileSync('worker/wrangler.jsonc', 'utf8');
 const checklist = fs.readFileSync('docs/ENGINEERING-CHECKLIST.md', 'utf8');
 
-const requiredMarkers = [
-  'per-user',
-  'per-IP',
-  'rate limit',
-];
-
-for (const marker of requiredMarkers) {
+for (const marker of ['per-user', 'per-IP', 'rate limit']) {
   if (!checklist.toLowerCase().includes(marker.toLowerCase())) {
     throw new Error(`Checklist missing rate-limit marker: ${marker}`);
   }
 }
 
-// This guard deliberately fails closed: the public gateway must not claim that
-// every endpoint is rate-limited until a concrete shared limiter is present.
-if (!/RATE_LIMIT|rateLimit|checkRateLimit|consumeRateLimit/i.test(gateway)) {
-  console.log('RATE_LIMIT_CONTRACT_PENDING: gateway has no concrete shared limiter yet.');
-  process.exit(0);
+const requiredGatewayPatterns = [
+  [/PUBLIC_IP_RATE_LIMIT/, 'public IP limiter binding'],
+  [/AUTH_IP_RATE_LIMIT/, 'auth IP limiter binding'],
+  [/\.limit\(\{key:/, 'RateLimit.limit key usage'],
+  [/code:\"RATE_LIMITED\"/, '429 application error code'],
+  [/status,.*429/, 'HTTP 429 response path'],
+  [/retry-after/, 'Retry-After guidance'],
+  [/cf-connecting-ip/, 'Cloudflare client IP source'],
+];
+for (const [pattern, description] of requiredGatewayPatterns) {
+  if (!pattern.test(gateway)) throw new Error(`Gateway rate-limit contract failed: ${description}`);
 }
 
-console.log('Rate-limit contract source marker detected.');
+for (const [pattern, description] of [
+  [/\"ratelimits\"/, 'rate-limit bindings'],
+  [/\"PUBLIC_IP_RATE_LIMIT\"/, 'public IP namespace'],
+  [/\"AUTH_IP_RATE_LIMIT\"/, 'auth IP namespace'],
+]) {
+  if (!pattern.test(config)) throw new Error(`Wrangler rate-limit contract failed: ${description}`);
+}
+
+console.log('Rate-limit contract checks passed.');
