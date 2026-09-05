@@ -33,7 +33,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] JSON remains the external API format.
 - [x] Relational billing/customer state uses D1.
 - [x] Schema changes are represented as ordered migrations.
-- [ ] Wrap multi-record entitlement transitions in an atomic unit wherever D1 semantics permit it.
+- [x] Multi-record entitlement transitions use D1 atomic batches where the transition requires consistency.
 - [x] Lookup-heavy billing paths have indexes.
 - [ ] Audit the private engine for N+1 access patterns.
 - [x] NoSQL is not introduced without a demonstrated document-shaped requirement.
@@ -64,6 +64,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Razorpay read failures now open a small bounded circuit breaker before repeated dependency calls continue.
 - [x] The read circuit allows only one half-open probe after cooldown, preventing a dependency recovery stampede.
 - [x] Provider event IDs are used for webhook deduplication.
+- [x] Webhook subscription status and entitlement updates are committed atomically for existing subscriptions.
 - [x] Checkout persistence failure cannot hide a successfully created Razorpay checkout URL.
 - [x] Concurrent checkout attempts use a D1-backed per-customer lease and can reuse an existing checkout URL.
 - [ ] Audit remaining shared-state updates for races and make read/modify/write sequences atomic.
@@ -92,7 +93,7 @@ This is the implementation checklist derived from the supplied engineering-block
 
 ## Quality and shipping
 
-- [x] Typechecks run for core Workers during CI/deployment.
+- [x] Typechecks run for core Workers during CI.
 - [x] Engineering-contract checks run in CI.
 - [x] Billing provider unit tests cover create, read, failure, malformed-id, timeout, and bounded-retry behavior.
 - [x] Integration-style health checks for binding-to-service paths.
@@ -103,7 +104,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Production health endpoints exist for the gateway, billing, and auth services.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
 - [x] Release contract validates the billing status route and gateway routing.
-- [x] CI validates the presence of the gateway rate-limit contract.
+- [x] CI validates the gateway rate-limit contract and migration synchronization.
 - [x] Provider tests validate circuit opening after repeated read failures.
 - [x] Provider tests validate single-probe recovery behavior after circuit cooldown.
 
