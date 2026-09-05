@@ -29,15 +29,13 @@ const versionContract = gateway.match(/\{name:\"Momentum API\",version:\"([^\"]+
 if (!versionContract) throw new Error("Gateway version contract is missing");
 const [, apiVersion, engineVersion, billingVersion, authVersion] = versionContract;
 
-const openapiVersionBlock = openapi.match(/\n  \/version:\n[\s\S]*?(?=\n  \/v1\/)/)?.[0] ?? "";
-const versionResponse = openapi.match(/\n    VersionResponse:\n[\s\S]*?(?=\n  responses:)/)?.[0] ?? "";
 const openapiContractMatches =
   openapi.includes(`  version: ${apiVersion}`) &&
-  versionResponse.includes(`example: ${apiVersion}`) &&
-  versionResponse.includes(`example: ${engineVersion}`) &&
-  versionResponse.includes(`example: ${billingVersion}`) &&
-  versionResponse.includes(`example: ${authVersion}`) &&
-  openapiVersionBlock.includes("$ref: '#/components/schemas/VersionResponse'");
+  openapi.includes(`        version: { type: string, example: ${apiVersion} }`) &&
+  openapi.includes(`        engine: { type: string, example: ${engineVersion} }`) &&
+  openapi.includes(`        billing: { type: string, example: ${billingVersion} }`) &&
+  openapi.includes(`        auth: { type: string, example: ${authVersion} }`) &&
+  openapi.includes("$ref: '#/components/schemas/VersionResponse'");
 
 const assertions = [
   [index.includes("window.location.href=u.href"), "checkout must navigate directly to the validated Razorpay URL"],
