@@ -66,6 +66,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Checkout persistence failure cannot hide a successfully created Razorpay checkout URL.
 - [x] Concurrent checkout attempts use a D1-backed per-customer lease and can reuse an existing checkout URL.
 - [ ] Audit remaining shared-state updates for races and make read/modify/write sequences atomic.
+- [x] Authenticated customers can request a bounded Razorpay subscription status refresh through `/billing/status`.
 
 ## Performance
 
@@ -91,12 +92,13 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Engineering-contract checks run in CI.
 - [x] Billing provider unit tests cover create, read, failure, malformed-id, and timeout behavior.
 - [x] Add integration-style health checks for binding-to-service paths.
-- [x] Add Playwright browser smoke coverage for the public demo and critical anonymous boundaries.
+- [x] Add Playwright smoke coverage for the public demo and critical anonymous boundaries.
 - [x] CI/CD deployment exists.
 - [x] Deployment smoke tests verify gateway version plus direct billing/auth binding health.
 - [x] Post-deploy production release gate verifies the deployed gateway, bindings, security headers, protected routes, and current browser UI markers.
 - [x] Production health endpoints exist for the gateway, billing, and auth services.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
+- [x] Release contract validates the billing status route and gateway routing.
 
 ## Provider abstraction
 
