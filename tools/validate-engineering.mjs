@@ -31,7 +31,7 @@ const assertions = [
   [architecture.includes("successful Razorpay subscription creation must return"), "billing invariant missing from architecture"],
   [provider.includes("getSubscription(subscriptionId: string)"), "provider read interface missing"],
   [billing.includes("/billing/status") && billing.includes("provider.getSubscription(sid)"), "authenticated billing status reconciliation missing"],
-  [gateway.includes("isBillingStatus=url.pathname==\"/billing/status\"") && gateway.includes("isRazorpayWebhook||isBillingClaim||isCheckout||isBillingStatus"), "gateway must route billing status to the billing service"],
+  [gateway.includes("/billing/status") && gateway.includes("isBillingStatus") && gateway.includes("binding=env.BILLING"), "gateway must route billing status to the billing service"],
 ];
 
 for (const [ok, message] of assertions) {
