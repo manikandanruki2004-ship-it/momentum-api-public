@@ -1,4 +1,4 @@
-name: Public SDK CI
+name: Momentum CI
 
 on:
   push:
@@ -6,14 +6,73 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
+  static-and-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check repository hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f CLAUDE.md
+          test -f docs/ARCHITECTURE.md
+          test -f docs/ENGINEERING-CHECKLIST.md
+          test -f skills/secure-saas-build/SKILL.md
+          if grep -RniE '(^|[^A-Za-z])(sk|rk|ghp|github_pat|xox[baprs]-)[A-Za-z0-9_./-]+' --exclude-dir=.git --exclude='*.lock' .; then
+            echo 'Possible credential/token pattern found in tracked source.'
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install gateway dependencies
+        working-directory: worker
+        run: npm install --no-audit --no-fund
+
+      - name: Install billing dependencies
+        working-directory: billing
+        run: npm install --no-audit --no-fund
+
+      - name: Install auth dependencies
+        working-directory: auth
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck gateway
+        working-directory: worker
+        run: npm run typecheck
+
+      - name: Typecheck billing
+        working-directory: billing
+        run: npm run typecheck
+
+      - name: Typecheck auth
+        working-directory: auth
+        run: npm run typecheck
+
   python-sdk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --upgrade pip
-      - run: pip install httpx
-      - run: python -m compileall sdk
+      - name: Install SDK test dependency
+        run: python -m pip install --upgrade pip && pip install httpx
+      - name: Compile SDK
+        run: python -m compileall sdk
