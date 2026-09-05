@@ -262,27 +262,27 @@ jobs:
           AUTH_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/auth-check.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{}' "$BASE_URL/auth/google")"
           echo "HTTP $AUTH_STATUS"; cat /tmp/auth-check.json; echo
           check_status "$AUTH_STATUS" "401"
-          jq -e '.error.code == "INVALID_CREDENTIAL" and (.request_id | startswith("req_"))' /tmp/auth-check.json >/dev/null
+          jq -e '.error.code == "INVALID_CREDENTIAL" and (.error.request_id | startswith("req_"))' /tmp/auth-check.json >/dev/null
           echo "== protected billing boundary =="
           BILLING_STATUS="$(get_status "$BASE_URL/billing/status" /tmp/billing-status.json)"
           echo "HTTP $BILLING_STATUS"; cat /tmp/billing-status.json; echo
           check_status "$BILLING_STATUS" "401"
-          jq -e '(.error.code == "UNAUTHORIZED" or .error.code == "SERVICE_UNAVAILABLE") and (.request_id | startswith("req_"))' /tmp/billing-status.json >/dev/null
+          jq -e '(.error.code == "UNAUTHORIZED" or .error.code == "SERVICE_UNAVAILABLE") and (.error.request_id | startswith("req_"))' /tmp/billing-status.json >/dev/null
           echo "== invalid query validation =="
           QUERY_STATUS="$(get_status "$BASE_URL/rankings?limit=0" /tmp/query-check.json)"
           echo "HTTP $QUERY_STATUS"; cat /tmp/query-check.json; echo
           check_status "$QUERY_STATUS" "400"
-          jq -e '.error.code == "INVALID_LIMIT" and (.request_id | startswith("req_"))' /tmp/query-check.json >/dev/null
+          jq -e '.error.code == "INVALID_LIMIT" and (.error.request_id | startswith("req_"))' /tmp/query-check.json >/dev/null
           echo "== method boundary =="
           METHOD_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/method-check.json --write-out '%{http_code}' -X DELETE "$BASE_URL/health")"
           echo "HTTP $METHOD_STATUS"; cat /tmp/method-check.json; echo
           check_status "$METHOD_STATUS" "405"
-          jq -e '.error.code == "METHOD_NOT_ALLOWED" and (.request_id | startswith("req_"))' /tmp/method-check.json >/dev/null
+          jq -e '.error.code == "METHOD_NOT_ALLOWED" and (.error.request_id | startswith("req_"))' /tmp/method-check.json >/dev/null
           echo "== webhook boundary =="
           WEBHOOK_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/webhook-check.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{}' "$BASE_URL/billing/webhook")"
           echo "HTTP $WEBHOOK_STATUS"; cat /tmp/webhook-check.json; echo
           check_status "$WEBHOOK_STATUS" "401"
-          jq -e '(.error.code == "UNAUTHORIZED" or .error.code == "WEBHOOK_SECRET_MISSING") and (.request_id | startswith("req_"))' /tmp/webhook-check.json >/dev/null
+          jq -e '(.error.code == "UNAUTHORIZED" or .error.code == "WEBHOOK_SECRET_MISSING") and (.error.request_id | startswith("req_"))' /tmp/webhook-check.json >/dev/null
           echo "== checkout redirect =="
           CHECKOUT_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/checkout-check.html --write-out '%{http_code}' -I "$BASE_URL/billing/checkout")"
           echo "HTTP $CHECKOUT_STATUS"; cat /tmp/checkout-check.html; echo
