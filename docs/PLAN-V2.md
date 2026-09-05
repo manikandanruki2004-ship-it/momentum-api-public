@@ -25,6 +25,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 13. Allow an authenticated customer to refresh provider subscription state, while keeping verified webhooks authoritative for normal entitlement processing.
 14. Keep the public API documentation synchronized with the actual gateway and billing route surface.
 15. Keep retry behavior inside the provider adapter so route logic cannot accidentally retry a remote mutation.
+16. Keep cumulative retry latency inside the caller's request budget by using a shorter timeout for retried provider reads.
 
 ## Delivery phases
 
@@ -67,6 +68,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 
 - [x] Razorpay and critical binding/provider calls have bounded timeouts.
 - [x] Add safe retry-with-backoff only to the idempotent Razorpay subscription read path, with a small capped attempt budget.
+- [x] Keep the maximum retry-read budget below the gateway's 8-second upstream timeout.
 - [ ] Add circuit breaking around repeatedly failing external dependencies.
 - [ ] Make remaining shared-state updates atomic.
 - [ ] Audit rate limiting per user and per IP.
@@ -92,6 +94,6 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - Razorpay webhook events are verified, deduplicated, ordered, and reconcile the correct Momentum account.
 - Pro access is never granted merely because a browser was redirected.
 - An authenticated customer can request a bounded provider status refresh without bypassing webhook authorization rules.
-- Provider retries are constrained to idempotent reads and cannot silently turn subscription creation into a retried mutation.
+- Provider retries are constrained to idempotent reads, use a cumulative timeout budget compatible with the gateway, and cannot silently turn subscription creation into a retried mutation.
 - Billing or engine dependency failure produces a safe user message and searchable diagnostics.
 - A failed validation or health gate blocks release.
