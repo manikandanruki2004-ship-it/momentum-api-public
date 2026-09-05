@@ -21,8 +21,10 @@ jobs:
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
           curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 -D /tmp/headers.txt "$BASE/health" -o /tmp/health.json
           jq -e '.status == "ok" and .service == "momentum-api-public" and .billing == "service-binding" and .auth == "service-binding" and .engine == "service-binding"' /tmp/health.json >/dev/null
-          grep -qi '^strict-transport-security:' /tmp/headers.txt
-          grep -qi '^x-content-type-options:' /tmp/headers.txt
+          for header in strict-transport-security x-content-type-options referrer-policy permissions-policy content-security-policy cross-origin-opener-policy; do
+            grep -qi "^${header}:" /tmp/headers.txt
+          done
+          grep -Eiq "^content-security-policy: .*frame-ancestors 'none'" /tmp/headers.txt
           grep -qi '^x-request-id:' /tmp/headers.txt
 
       - name: Verify gateway release version
