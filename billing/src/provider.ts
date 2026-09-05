@@ -43,13 +43,14 @@ class ReadCircuitBreaker {
 
   permit() {
     const now = Date.now();
-    if (this.state.openUntil <= now) {
-      if (this.state.openUntil !== 0 && this.state.probeInFlight) return false;
-      if (this.state.openUntil !== 0) this.state.probeInFlight = true;
-      this.state.openUntil = 0;
+    const open = this.state.openUntil > now;
+    if (open) return false;
+    if (this.state.openUntil !== 0) {
+      if (this.state.probeInFlight) return false;
+      this.state.probeInFlight = true;
       return true;
     }
-    return false;
+    return true;
   }
 
   success() {
@@ -60,8 +61,8 @@ class ReadCircuitBreaker {
 
   failure() {
     this.state.failures += 1;
-    this.state.probeInFlight = false;
     if (this.state.failures >= READ_FAILURE_THRESHOLD) this.state.openUntil = Date.now() + READ_OPEN_MS;
+    this.state.probeInFlight = false;
   }
 }
 
