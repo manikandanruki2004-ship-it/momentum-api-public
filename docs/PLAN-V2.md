@@ -22,6 +22,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 10. User-facing errors stay calm and safe; detailed diagnostics remain server-side.
 11. Ship only after automated checks pass and the real browser path is verified.
 12. Do not automatically retry Razorpay subscription creation because it is a remote mutation; retries are reserved for reads or operations with proven idempotency.
+13. Allow an authenticated customer to refresh provider subscription state, while keeping verified webhooks authoritative for normal entitlement processing.
 
 ## Delivery phases
 
@@ -39,6 +40,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - [x] Separate account, scan, Pro, results, and trust concepts visually.
 - [x] Make errors visible without exposing implementation details.
 - [x] Keep sample data available without authentication so the page is useful immediately.
+- [ ] Add an explicit post-checkout “refresh billing status” browser control.
 
 ### Phase C — billing reliability
 
@@ -49,6 +51,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - [x] Idempotent checkout-attempt handling with a per-customer D1 lease and reusable checkout URL.
 - [x] Razorpay billing calls isolated behind a `BillingProvider` adapter.
 - [x] Razorpay subscription reads also use the billing adapter with bounded timeouts.
+- [x] Add authenticated `/billing/status` reconciliation for the current checkout/subscription.
 
 ### Phase D — security
 
@@ -83,5 +86,6 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - Clicking Upgrade produces one active checkout attempt per account and opens the valid Razorpay URL.
 - Razorpay webhook events are verified, deduplicated, ordered, and reconcile the correct Momentum account.
 - Pro access is never granted merely because a browser was redirected.
+- An authenticated customer can request a bounded provider status refresh without bypassing webhook authorization rules.
 - Billing or engine dependency failure produces a safe user message and searchable diagnostics.
 - A failed validation or health gate blocks release.
