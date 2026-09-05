@@ -106,7 +106,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Production health endpoints exist for the gateway, billing, and auth services.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
 - [x] Release contract validates the billing status route and gateway routing.
-- [x] CI validates the gateway rate-limit contract, webhook atomicity, and ordered D1 migration contract.
+- [x] CI validates the gateway rate-limit contract, webhook atomicity, ordered D1 migration contract, and authentication throttling contract.
 - [x] Production D1 migration runner is pinned, serialized, and validates the migration sequence before execution.
 - [x] Provider tests validate circuit opening after repeated read failures.
 - [x] Provider tests validate single-probe recovery behavior after circuit cooldown.
