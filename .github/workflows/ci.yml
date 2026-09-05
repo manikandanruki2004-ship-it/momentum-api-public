@@ -66,6 +66,9 @@ jobs:
       - name: Validate D1 migration contract
         run: node tools/check-migration-contract.mjs
 
+      - name: Validate auth throttling
+        run: node tools/validate-auth-throttle.mjs
+
       - name: Install gateway dependencies
         working-directory: worker
         run: npm install --no-audit --no-fund
