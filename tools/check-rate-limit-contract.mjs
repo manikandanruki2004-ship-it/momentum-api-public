@@ -4,7 +4,7 @@ const gateway = fs.readFileSync('worker/src/index.ts', 'utf8');
 const config = fs.readFileSync('worker/wrangler.jsonc', 'utf8');
 const checklist = fs.readFileSync('docs/ENGINEERING-CHECKLIST.md', 'utf8');
 
-for (const marker of ['per-user', 'per-IP', 'rate limit']) {
+for (const marker of ['user-specific', 'per-IP', 'rate limit']) {
   if (!checklist.toLowerCase().includes(marker.toLowerCase())) {
     throw new Error(`Checklist missing rate-limit marker: ${marker}`);
   }
@@ -24,7 +24,7 @@ for (const [pattern, description] of requiredGatewayPatterns) {
 }
 
 for (const [pattern, description] of [
-  [/\"ratelimits\"/, 'rate-limit bindings'],
+  /\"ratelimits\"/, 'rate-limit bindings'],
   [/\"PUBLIC_IP_RATE_LIMIT\"/, 'public IP namespace'],
   [/\"AUTH_IP_RATE_LIMIT\"/, 'auth IP namespace'],
 ]) {
