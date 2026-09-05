@@ -21,9 +21,10 @@ jobs:
           request() { curl --connect-timeout 10 --max-time 30 --silent --show-error --retry 3 --retry-delay 2 "$@"; }
           request "$BASE/health" | tee /tmp/gateway.json
           jq -e '.status == "ok" and .service == "momentum-api-public"' /tmp/gateway.json >/dev/null
-          for header in strict-transport-security x-content-type-options referrer-policy permissions-policy; do
+          for header in strict-transport-security x-content-type-options referrer-policy permissions-policy content-security-policy cross-origin-opener-policy; do
             request --head "$BASE/health" | tr -d '\r' | grep -i "^${header}:" >/dev/null
           done
+          request --head "$BASE/health" | tr -d '\r' | grep -Eiq "^content-security-policy: .*frame-ancestors 'none'" || { echo "CSP frame-ancestors missing"; exit 1; }
 
       - name: Check billing service binding
         shell: bash
