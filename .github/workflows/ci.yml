@@ -26,6 +26,7 @@ jobs:
           test -f CLAUDE.md
           test -f docs/ARCHITECTURE.md
           test -f docs/ENGINEERING-CHECKLIST.md
+          test -f docs/PLAN-V2.md
           test -f skills/secure-saas-build/SKILL.md
           set +e
           grep -RniE '(^|[^A-Za-z])(sk-[A-Za-z0-9]{20,}|rk_(live|test)_[A-Za-z0-9]{12,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})' \
@@ -45,6 +46,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Validate engineering contract
+        run: node tools/validate-engineering.mjs
 
       - name: Install gateway dependencies
         working-directory: worker
