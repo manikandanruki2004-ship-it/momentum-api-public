@@ -61,7 +61,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Provider subscription reads are behind the same billing adapter and have bounded timeouts.
 - [x] Retry-with-backoff is limited to the idempotent Razorpay subscription read path and capped at a small number of attempts.
 - [x] Retried subscription reads use a shorter per-attempt timeout so the full retry budget remains below the gateway's 8-second upstream deadline.
-- [ ] Add a small circuit-breaker abstraction for repeatedly failing external dependencies.
+- [x] Razorpay read failures now open a small bounded circuit breaker before repeated dependency calls continue.
 - [x] Provider event IDs are used for webhook deduplication.
 - [x] Checkout persistence failure cannot hide a successfully created Razorpay checkout URL.
 - [x] Concurrent checkout attempts use a D1-backed per-customer lease and can reuse an existing checkout URL.
@@ -103,6 +103,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
 - [x] Release contract validates the billing status route and gateway routing.
 - [x] CI validates the presence of the gateway rate-limit contract.
+- [x] Provider tests validate circuit opening after repeated read failures.
 
 ## Provider abstraction
 
