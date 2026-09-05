@@ -11,6 +11,9 @@ const required = [
   [billing, 'CHECKOUT_IN_PROGRESS', 'billing exposes concurrent-checkout protection'],
   [billing, 'checkout_url', 'billing can reuse an existing provider checkout URL'],
   [billing, 'await storeUnclaimed(env, data.id', 'billing preserves the checkout response before best-effort persistence'],
+  [billing, 'await env.DB.batch(updates)', 'webhook entitlement updates are committed atomically'],
+  [billing, 'UPDATE razorpay_webhook_events SET status=?,processed_at=?,error_message=NULL', 'successful webhook state and event completion are in the same transaction'],
+  [billing, 'const results = await env.DB.batch([', 'subscription claim transition uses one D1 transaction'],
   [provider, 'export interface BillingProvider', 'provider interface exists'],
   [provider, 'AbortController', 'provider calls have an explicit timeout'],
   [provider, 'const maxAttempts = retryableRead ? 3 : 1', 'provider retry budget is restricted to retryable reads'],
@@ -24,6 +27,14 @@ const required = [
 
 for (const [text, needle, description] of required) {
   if (!text.includes(needle)) throw new Error(`Billing design check failed: ${description}`);
+}
+
+const existingEventBlock = billing.slice(billing.indexOf('if (existing) {'), billing.indexOf('await storeUnclaimed', billing.indexOf('if (existing) {')));
+if (!existingEventBlock.includes('env.DB.batch(updates)')) {
+  throw new Error('Billing design check failed: existing subscription webhook path is not atomic');
+}
+if (/await sync(Pro|Free)\(env, existing\.customer_id/.test(existingEventBlock)) {
+  throw new Error('Billing design check failed: existing subscription webhook path still performs separate entitlement writes');
 }
 
 for (const path of [
