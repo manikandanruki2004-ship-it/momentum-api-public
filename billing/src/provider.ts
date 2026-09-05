@@ -67,9 +67,18 @@ class ReadCircuitBreaker {
 }
 
 const isTransientReadFailure = (status: number) => status === 429 || status >= 500;
+const readCircuits = new WeakMap<object, ReadCircuitBreaker>();
+
+function getReadCircuit(fetchImpl: typeof fetch): ReadCircuitBreaker {
+  const existing = readCircuits.get(fetchImpl);
+  if (existing) return existing;
+  const created = new ReadCircuitBreaker();
+  readCircuits.set(fetchImpl, created);
+  return created;
+}
 
 export class RazorpayProvider implements BillingProvider {
-  private readonly readCircuit = new ReadCircuitBreaker();
+  private readonly readCircuit: ReadCircuitBreaker;
 
   constructor(
     private readonly keyId: string,
@@ -77,7 +86,9 @@ export class RazorpayProvider implements BillingProvider {
     private readonly timeoutMs = 8000,
     private readonly readTimeoutMs = 2500,
     private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+  ) {
+    this.readCircuit = getReadCircuit(fetchImpl);
+  }
 
   private async request(url: string, init: RequestInit, retryableRead = false): Promise<ProviderResult> {
     if (retryableRead && !this.readCircuit.permit()) return { ok: false, status: 503, data: { error: { code: "PROVIDER_CIRCUIT_OPEN" } } };
