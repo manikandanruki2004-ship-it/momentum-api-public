@@ -25,13 +25,9 @@ const gateway = readFileSync("worker/src/index.ts", "utf8");
 const provider = readFileSync("billing/src/provider.ts", "utf8");
 const openapi = readFileSync("openapi.yaml", "utf8");
 
-const apiVersion = gateway.match(/version\s*:\s*\"([^\"]+)\"/)?.[1] ?? null;
-const engineVersion = gateway.match(/engine\s*:\s*\"([^\"]+)\"/)?.[1] ?? null;
-const billingVersion = gateway.match(/billing\s*:\s*\"([^\"]+)\"/)?.[1] ?? null;
-const authVersion = gateway.match(/auth\s*:\s*\"([^\"]+)\"/)?.[1] ?? null;
-if (!apiVersion || !engineVersion || !billingVersion || !authVersion) {
-  throw new Error("Gateway version contract is missing");
-}
+const versionContract = gateway.match(/\{name:\"Momentum API\",version:\"([^\"]+)\",engine:\"([^\"]+)\",billing:\"([^\"]+)\",auth:\"([^\"]+)\"\}/);
+if (!versionContract) throw new Error("Gateway version contract is missing");
+const [, apiVersion, engineVersion, billingVersion, authVersion] = versionContract;
 
 const assertions = [
   [index.includes("window.location.href=u.href"), "checkout must navigate directly to the validated Razorpay URL"],
