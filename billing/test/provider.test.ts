@@ -31,14 +31,7 @@ test("RazorpayProvider fetches an existing subscription through the adapter", as
   const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async (url, init) => {
     assert.equal(url, "https://api.razorpay.com/v1/subscriptions/sub_test");
     assert.equal(init?.method, "GET");
-    return new Response(JSON.stringify({
-      id: "sub_test",
-      status: "active",
-      plan_id: "plan_test",
-      customer_id: "cust_rzp_test",
-      current_start: 1760000000,
-      current_end: 1762678400,
-    }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ id: "sub_test", status: "active", plan_id: "plan_test", customer_id: "cust_rzp_test", current_start: 1760000000, current_end: 1762678400 }), { status: 200, headers: { "content-type": "application/json" } });
   });
 
   const result = await provider.getSubscription("sub_test");
@@ -135,4 +128,24 @@ test("RazorpayProvider aborts a provider call after the configured timeout", asy
   await assert.rejects(() => provider.createSubscription(payload), (error: unknown) => {
     return error instanceof DOMException && error.name === "AbortError";
   });
+});
+
+test("RazorpayProvider opens its read circuit after repeated failures", async () => {
+  let calls = 0;
+  const failingFetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ error: { code: "TEMPORARY" } }), { status: 503 });
+  };
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, failingFetch);
+
+  await provider.getSubscription("sub_a");
+  await provider.getSubscription("sub_b");
+  await provider.getSubscription("sub_c");
+  const before = calls;
+  const blocked = await provider.getSubscription("sub_d");
+
+  assert.equal(calls, before);
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.status, 503);
+  assert.equal(blocked.data.error?.code, "PROVIDER_CIRCUIT_OPEN");
 });
