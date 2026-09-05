@@ -170,6 +170,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
           RAZORPAY_TEST_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_TEST_WEBHOOK_SECRET }}
           RAZORPAY_PRO_PLAN_ID: ${{ secrets.RAZORPAY_PRO_PLAN_ID }}
@@ -179,11 +181,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$RAZORPAY_KEY_ID"
+          test -n "$RAZORPAY_KEY_SECRET"
           if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json; fi
           if [ -n "$RAZORPAY_TEST_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_TEST_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_TEST_WEBHOOK_SECRET --config wrangler.deploy.json; fi
           if [ -n "$RAZORPAY_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json; fi
           if [ -n "$RAZORPAY_TEST_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_TEST_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_TEST_PRO_PLAN_ID --config wrangler.deploy.json; fi
-          if [ -n "$MOMENTUM_API_KEY_PEPPER" ]; then printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json; fi
+          printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json
+          printf '%s' "$RAZORPAY_KEY_ID" | npx wrangler secret put RAZORPAY_KEY_ID --config wrangler.deploy.json
+          printf '%s' "$RAZORPAY_KEY_SECRET" | npx wrangler secret put RAZORPAY_KEY_SECRET --config wrangler.deploy.json
       - name: Create Google auth Worker config
         working-directory: auth
         run: |
@@ -252,7 +258,7 @@ jobs:
           echo "== auth credential validation =="
           AUTH_STATUS="$(curl --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/auth/google" -H 'Content-Type: application/json' -d '{}')"
           echo "HTTP $AUTH_STATUS"; cat /tmp/auth.json; echo
-          check_status "$AUTH_STATUS" "400"
+          check_status "$AUTH_STATUS" "401"
           jq -e '.error.code == "INVALID_CREDENTIAL"' /tmp/auth.json >/dev/null
           echo "== auth session protection =="
           AUTH_ME_STATUS="$(curl --silent --show-error --output /tmp/auth-me.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/auth/me")"
