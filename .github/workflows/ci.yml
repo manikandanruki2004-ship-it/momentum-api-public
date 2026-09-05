@@ -73,6 +73,10 @@ jobs:
         working-directory: billing
         run: npm run typecheck
 
+      - name: Test billing provider
+        working-directory: billing
+        run: npm test
+
       - name: Typecheck auth
         working-directory: auth
         run: npm run typecheck
