@@ -61,6 +61,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Razorpay subscription creation has an 8-second provider timeout through the billing adapter.
 - [x] Provider subscription reads are behind the same billing adapter and have bounded timeouts.
 - [x] Retry-with-backoff is limited to the idempotent Razorpay subscription read path and capped at a small number of attempts.
+- [x] Retried subscription reads use a shorter per-attempt timeout so the full retry budget remains below the gateway's 8-second upstream deadline.
 - [ ] Add a small circuit-breaker abstraction for repeatedly failing external dependencies.
 - [x] Provider event IDs are used for webhook deduplication.
 - [x] Checkout persistence failure cannot hide a successfully created Razorpay checkout URL.
