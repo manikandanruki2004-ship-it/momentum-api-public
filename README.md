@@ -41,6 +41,8 @@ Normal web users do not need to create or paste an API key. Google identity is v
 
 Each upgrade creates a customer-specific Razorpay subscription. Momentum returns the provider checkout URL promptly and uses verified Razorpay webhook events as the authority for entitlement changes. Local billing records reconcile provider customer IDs and subscription state without trusting a browser redirect as proof of payment.
 
+Authenticated customers can also call `GET /billing/status` to reconcile the current Razorpay subscription state after returning from hosted checkout. This is a recovery/status path; it does not replace webhook signature verification or make a browser redirect proof of payment.
+
 See [`docs/RAZORPAY_BILLING.md`](docs/RAZORPAY_BILLING.md) for the billing lifecycle.
 
 ## Architecture
@@ -120,6 +122,7 @@ POST /auth/logout
 GET  /v1/me
 GET  /v1/momentum
 POST /billing/checkout
+GET  /billing/status
 POST /billing/claim
 POST /webhooks/razorpay
 GET  /billing/health
@@ -149,7 +152,7 @@ git push
   -> verify live critical flows
 ```
 
-A green compile is not sufficient for a browser-facing change. The critical upgrade flow must be tested in a real browser, including navigation to the hosted Razorpay checkout and post-webhook account state.
+A green compile is not sufficient for a browser-facing change. The critical upgrade flow must be tested in a real browser, including navigation to the hosted Razorpay checkout and post-webhook account state. The authenticated `/billing/status` route provides an explicit recovery check after returning from checkout.
 
 ## Security
 
