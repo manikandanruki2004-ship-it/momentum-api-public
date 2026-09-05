@@ -25,12 +25,10 @@ const gateway = readFileSync("worker/src/index.ts", "utf8");
 const provider = readFileSync("billing/src/provider.ts", "utf8");
 const openapi = readFileSync("openapi.yaml", "utf8");
 
-const versionBlock = gateway.match(/url\.pathname===\"\/version\"\)return json\([^;]+/s)?.[0] ?? gateway;
-const readVersion = (name) => versionBlock.match(new RegExp(`${name}\\s*:\\s*\\\"([^\\\"]+)\\\"`))?.[1] ?? null;
-const apiVersion = readVersion("version");
-const engineVersion = readVersion("engine");
-const billingVersion = readVersion("billing");
-const authVersion = readVersion("auth");
+const apiVersion = gateway.match(/version\s*:\s*\"([^\"]+)\"/)?.[1] ?? null;
+const engineVersion = gateway.match(/engine\s*:\s*\"([^\"]+)\"/)?.[1] ?? null;
+const billingVersion = gateway.match(/billing\s*:\s*\"([^\"]+)\"/)?.[1] ?? null;
+const authVersion = gateway.match(/auth\s*:\s*\"([^\"]+)\"/)?.[1] ?? null;
 if (!apiVersion || !engineVersion || !billingVersion || !authVersion) {
   throw new Error("Gateway version contract is missing");
 }
@@ -43,6 +41,9 @@ const assertions = [
   [claude.includes("Make retryable mutations idempotent"), "idempotency rule missing from CLAUDE.md"],
   [architecture.includes("successful Razorpay subscription creation must return"), "billing invariant missing from architecture"],
   [provider.includes("getSubscription(subscriptionId: string)"), "provider read interface missing"],
+  [provider.includes("const maxAttempts = retryableRead ? 3 : 1"), "provider read retry policy missing"],
+  [provider.includes("const attemptTimeoutMs = retryableRead ? this.readTimeoutMs : this.timeoutMs"), "provider read timeout budget missing"],
+  [provider.includes("method: \"POST\""), "provider subscription creation path missing"],
   [billing.includes("/billing/status") && billing.includes("provider.getSubscription(sid)"), "authenticated billing status reconciliation missing"],
   [gateway.includes("/billing/status") && gateway.includes("isBillingStatus") && gateway.includes("binding=env.BILLING"), "gateway must route billing status to the billing service"],
   [openapi.includes("  /billing/status:"), "OpenAPI must document billing status"],
