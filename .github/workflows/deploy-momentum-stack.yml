@@ -125,7 +125,8 @@ jobs:
             0016_razorpay_checkout_attempts.sql \
             0017_auth_rate_limit.sql \
             0018_billing_entitlement_sync_triggers.sql \
-            0019_rebuild_billing_entitlement_sync_triggers.sql; do
+            0019_rebuild_billing_entitlement_sync_triggers.sql \
+            0020_rebuild_billing_entitlement_active_state.sql; do
             test -f "worker/migrations/$migration"
             cp "worker/migrations/$migration" "_private-engine/worker/migrations/$migration"
           done
