@@ -1,11 +1,10 @@
 name: Apply Razorpay Customer ID Sync Repair
 
+# Recovery-only workflow. Normal deployments apply migrations through the
+# primary deployment pipeline; this file must never mutate production merely
+# because source files changed.
+
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'worker/migrations/0016_sync_razorpay_customer_id.sql'
-      - '.github/workflows/apply-razorpay-customer-sync-repair.yml'
   workflow_dispatch:
 
 permissions:
