@@ -7,6 +7,9 @@ const required = [
   "docs/PLAN-V2.md",
   "skills/secure-saas-build/SKILL.md",
   "demo/index.html",
+  "billing/src/index.ts",
+  "billing/src/provider.ts",
+  "worker/src/index.ts",
 ];
 
 for (const path of required) {
@@ -16,6 +19,9 @@ for (const path of required) {
 const index = readFileSync("demo/index.html", "utf8");
 const claude = readFileSync("CLAUDE.md", "utf8");
 const architecture = readFileSync("docs/ARCHITECTURE.md", "utf8");
+const billing = readFileSync("billing/src/index.ts", "utf8");
+const gateway = readFileSync("worker/src/index.ts", "utf8");
+const provider = readFileSync("billing/src/provider.ts", "utf8");
 
 const assertions = [
   [index.includes("window.location.href=u.href"), "checkout must navigate directly to the validated Razorpay URL"],
@@ -23,6 +29,9 @@ const assertions = [
   [claude.includes("Every outbound network call has a bounded timeout"), "reliability rule missing from CLAUDE.md"],
   [claude.includes("Make retryable mutations idempotent"), "idempotency rule missing from CLAUDE.md"],
   [architecture.includes("successful Razorpay subscription creation must return"), "billing invariant missing from architecture"],
+  [provider.includes("getSubscription(subscriptionId: string)"), "provider read interface missing"],
+  [billing.includes("/billing/status") && billing.includes("provider.getSubscription(sid)"), "authenticated billing status reconciliation missing"],
+  [gateway.includes("isBillingStatus=url.pathname==\"/billing/status\"") && gateway.includes("isRazorpayWebhook||isBillingClaim||isCheckout||isBillingStatus"), "gateway must route billing status to the billing service"],
 ];
 
 for (const [ok, message] of assertions) {
