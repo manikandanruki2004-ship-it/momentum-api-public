@@ -66,6 +66,8 @@ class ReadCircuitBreaker {
   }
 }
 
+const isTransientReadFailure = (status: number) => status === 429 || status >= 500;
+
 export class RazorpayProvider implements BillingProvider {
   private readonly readCircuit = new ReadCircuitBreaker();
 
@@ -106,9 +108,12 @@ export class RazorpayProvider implements BillingProvider {
             data = {};
           }
           lastResult = { ok: response.ok, status: response.status, data };
-          if (!retryableRead || response.ok || (response.status !== 429 && response.status < 500) || attempt === maxAttempts - 1) {
-            if (retryableRead && response.ok) this.readCircuit.success();
-            else if (retryableRead && !response.ok) this.readCircuit.failure();
+
+          if (retryableRead && !isTransientReadFailure(response.status)) {
+            this.readCircuit.success();
+            return lastResult;
+          }
+          if (!retryableRead || !isTransientReadFailure(response.status) || attempt === maxAttempts - 1) {
             return lastResult;
           }
         } finally {
