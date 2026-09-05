@@ -18,7 +18,7 @@ const claude = readFileSync("CLAUDE.md", "utf8");
 const architecture = readFileSync("docs/ARCHITECTURE.md", "utf8");
 
 const assertions = [
-  [index.includes("window.location.href = parsed.href"), "checkout must navigate directly to the validated Razorpay URL"],
+  [index.includes("window.location.href=u.href"), "checkout must navigate directly to the validated Razorpay URL"],
   [index.includes("https://momentum-api-public.manikandanruki2004.workers.dev"), "demo must target the production gateway"],
   [claude.includes("Every outbound network call has a bounded timeout"), "reliability rule missing from CLAUDE.md"],
   [claude.includes("Make retryable mutations idempotent"), "idempotency rule missing from CLAUDE.md"],
