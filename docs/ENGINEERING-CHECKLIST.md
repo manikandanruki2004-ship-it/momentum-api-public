@@ -87,7 +87,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Add integration-style health checks for binding-to-service paths.
 - [x] Add Playwright browser smoke coverage for the public demo and critical anonymous boundaries.
 - [x] CI/CD deployment exists.
-- [ ] Make production deployment conditional on all validation gates through a single release gate.
+- [x] Post-deploy production release gate verifies the deployed gateway, bindings, security headers, protected routes, and browser bundle.
 - [x] Production health endpoints exist for the gateway and billing service.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
 
@@ -124,4 +124,4 @@ A production release should satisfy:
 
 `plan -> validate -> test -> browser smoke -> deploy -> binding health -> live verification`
 
-A failure in an earlier gate blocks the release rather than being patched after the fact.
+The post-deploy gate is implemented in `.github/workflows/release-gate.yml`. A successful deploy is not treated as fully released until the gate passes.
