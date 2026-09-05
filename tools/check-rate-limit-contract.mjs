@@ -24,7 +24,7 @@ for (const [pattern, description] of requiredGatewayPatterns) {
 }
 
 for (const [pattern, description] of [
-  /\"ratelimits\"/, 'rate-limit bindings'],
+  [/\"ratelimits\"/, 'rate-limit bindings'],
   [/\"PUBLIC_IP_RATE_LIMIT\"/, 'public IP namespace'],
   [/\"AUTH_IP_RATE_LIMIT\"/, 'auth IP namespace'],
 ]) {
