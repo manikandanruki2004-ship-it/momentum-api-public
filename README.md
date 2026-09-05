@@ -39,9 +39,7 @@ Normal web users do not need to create or paste an API key. Google identity is v
 
 **Pro — ₹99/month**.
 
-Each upgrade creates a customer-specific Razorpay subscription. Momentum returns the provider checkout URL promptly and uses verified Razorpay webhook events as the authority for entitlement changes. Local billing records reconcile provider customer IDs and subscription state without trusting a browser redirect as proof of payment.
-
-Authenticated customers can also call `GET /billing/status` to reconcile the current Razorpay subscription state after returning from hosted checkout. This is a recovery/status path; it does not replace webhook signature verification or make a browser redirect proof of payment.
+Each upgrade creates a customer-specific Razorpay subscription. Momentum returns the provider checkout URL promptly and uses verified Razorpay webhook events as the authority for entitlement changes. After returning from checkout, an authenticated account can request `/billing/status` to reconcile the provider's current subscription state; this does not replace webhook authority.
 
 See [`docs/RAZORPAY_BILLING.md`](docs/RAZORPAY_BILLING.md) for the billing lifecycle.
 
@@ -106,7 +104,7 @@ The demo provides an immediate sample preview, then uses Google sign-in for live
 Developer integrations can use API keys with `X-API-Key` or `Authorization: Bearer`.
 
 ```bash
-curl "https://momentum-api-public.manikandanruki2004.workers.dev/v1/momentum?language=python&min_stars=100&limit=25" \
+curl "https://momentum-api-public.manikandanruki2004.workers.dev/v1/momentum?language=python&min_stars=100&limit=20" \
   -H "X-API-Key: mk_live_..."
 ```
 
@@ -126,13 +124,16 @@ GET  /billing/status
 POST /billing/claim
 POST /webhooks/razorpay
 GET  /billing/health
+GET  /auth/health
 ```
+
+`GET /billing/status` requires an authenticated browser session and reads the provider subscription through the billing adapter. It is a reconciliation aid for the customer experience; entitlement authority remains the verified Razorpay webhook path.
 
 ## Momentum query parameters
 
 | Parameter | Type | Default | Range |
 |---|---|---:|---:|
-| `language` | string | empty | — |
+| `language` | string | empty | max 64 chars |
 | `min_stars` | integer | `100` | `0..1000000` |
 | `max_age_days` | integer | `3650` | `1..36500` |
 | `limit` | integer | `5` | `1..20` |
@@ -152,7 +153,7 @@ git push
   -> verify live critical flows
 ```
 
-A green compile is not sufficient for a browser-facing change. The critical upgrade flow must be tested in a real browser, including navigation to the hosted Razorpay checkout and post-webhook account state. The authenticated `/billing/status` route provides an explicit recovery check after returning from checkout.
+A green compile is not sufficient for a browser-facing change. The critical upgrade flow must be tested in a real browser, including navigation to the hosted Razorpay checkout, return to Momentum, billing-status reconciliation, and post-webhook account state.
 
 ## Security
 
