@@ -1,0 +1,55 @@
+name: Momentum Browser E2E
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - 'e2e/**'
+      - 'worker/**'
+      - 'billing/**'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - 'e2e/**'
+      - 'worker/**'
+      - 'billing/**'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package.json
+      - name: Install Playwright
+        working-directory: e2e
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Run browser and public API smoke tests
+        working-directory: e2e
+        run: npm test
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: momentum-playwright-report
+          path: e2e/playwright-report/
+          if-no-files-found: ignore
