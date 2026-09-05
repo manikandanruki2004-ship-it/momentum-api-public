@@ -34,17 +34,19 @@ export class RazorpayProvider implements BillingProvider {
     private readonly keyId: string,
     private readonly keySecret: string,
     private readonly timeoutMs = 8000,
+    private readonly readTimeoutMs = 2500,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
   private async request(url: string, init: RequestInit, retryableRead = false): Promise<ProviderResult> {
     const auth = btoa(`${this.keyId}:${this.keySecret}`);
     const maxAttempts = retryableRead ? 3 : 1;
+    const attemptTimeoutMs = retryableRead ? this.readTimeoutMs : this.timeoutMs;
     let lastResult: ProviderResult = { ok: false, status: 503, data: { error: { code: "PROVIDER_UNAVAILABLE" } } };
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      const timer = setTimeout(() => controller.abort(), attemptTimeoutMs);
       try {
         const response = await this.fetchImpl(url, {
           ...init,
