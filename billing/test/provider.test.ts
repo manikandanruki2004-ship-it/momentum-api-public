@@ -11,7 +11,7 @@ const payload: RazorpaySubscriptionPayload = {
 };
 
 test("RazorpayProvider returns parsed successful responses", async () => {
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async (_url, init) => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async (_url, init) => {
     assert.equal(init?.method, "POST");
     assert.match(String(init?.headers && new Headers(init.headers).get("authorization")), /^Basic /);
     return new Response(JSON.stringify({ id: "sub_test", short_url: "https://rzp.io/rzp/test" }), {
@@ -28,7 +28,7 @@ test("RazorpayProvider returns parsed successful responses", async () => {
 });
 
 test("RazorpayProvider fetches an existing subscription through the adapter", async () => {
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async (url, init) => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async (url, init) => {
     assert.equal(url, "https://api.razorpay.com/v1/subscriptions/sub_test");
     assert.equal(init?.method, "GET");
     return new Response(JSON.stringify({
@@ -51,7 +51,7 @@ test("RazorpayProvider fetches an existing subscription through the adapter", as
 
 test("RazorpayProvider retries transient failures for subscription reads", async () => {
   let calls = 0;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async (_url, init) => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async (_url, init) => {
     assert.equal(init?.method, "GET");
     calls += 1;
     if (calls < 3) return new Response(JSON.stringify({ error: { code: "TEMPORARY" } }), { status: 503 });
@@ -66,7 +66,7 @@ test("RazorpayProvider retries transient failures for subscription reads", async
 
 test("RazorpayProvider retries rate-limited subscription reads", async () => {
   let calls = 0;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async (_url, init) => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async (_url, init) => {
     assert.equal(init?.method, "GET");
     calls += 1;
     return new Response(JSON.stringify({ error: { code: "RATE_LIMIT" } }), { status: 429 });
@@ -80,7 +80,7 @@ test("RazorpayProvider retries rate-limited subscription reads", async () => {
 
 test("RazorpayProvider does not retry non-retryable billing failures", async () => {
   let calls = 0;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async () => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async () => {
     calls += 1;
     return new Response(JSON.stringify({ error: { code: "BAD_REQUEST", description: "invalid plan" } }), { status: 400 });
   });
@@ -93,7 +93,7 @@ test("RazorpayProvider does not retry non-retryable billing failures", async () 
 
 test("RazorpayProvider rejects malformed subscription ids before network access", async () => {
   let called = false;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async () => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async () => {
     called = true;
     return new Response("should not be called", { status: 500 });
   });
@@ -106,7 +106,7 @@ test("RazorpayProvider rejects malformed subscription ids before network access"
 });
 
 test("RazorpayProvider preserves provider failures", async () => {
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async () => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async () => {
     return new Response(JSON.stringify({ error: { code: "BAD_REQUEST", description: "invalid plan" } }), {
       status: 400,
       headers: { "content-type": "application/json" },
@@ -120,7 +120,7 @@ test("RazorpayProvider preserves provider failures", async () => {
 });
 
 test("RazorpayProvider aborts a provider call after the configured timeout", async () => {
-  const provider = new RazorpayProvider("rzp_test", "secret", 20, async (_url, init) => {
+  const provider = new RazorpayProvider("rzp_test", "secret", 20, 2500, async (_url, init) => {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(resolve, 200);
       init?.signal?.addEventListener("abort", () => {
