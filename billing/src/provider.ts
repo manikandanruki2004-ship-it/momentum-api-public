@@ -32,43 +32,42 @@ export interface BillingProvider {
 type CircuitState = {
   failures: number;
   openUntil: number;
-  halfOpen: boolean;
+  probeInFlight: boolean;
 };
 
 const READ_FAILURE_THRESHOLD = 3;
 const READ_OPEN_MS = 5000;
-const readCircuit: CircuitState = { failures: 0, openUntil: 0, halfOpen: false };
 
-function circuitOpen() {
-  const now = Date.now();
-  if (readCircuit.openUntil <= now) {
-    if (readCircuit.openUntil !== 0) {
-      readCircuit.openUntil = 0;
-      readCircuit.halfOpen = true;
+class ReadCircuitBreaker {
+  private readonly state: CircuitState = { failures: 0, openUntil: 0, probeInFlight: false };
+
+  permit() {
+    const now = Date.now();
+    if (this.state.openUntil <= now) {
+      if (this.state.openUntil !== 0 && this.state.probeInFlight) return false;
+      if (this.state.openUntil !== 0) this.state.probeInFlight = true;
+      this.state.openUntil = 0;
+      return true;
     }
     return false;
   }
-  return !readCircuit.halfOpen;
-}
 
-function circuitPermit() {
-  if (!circuitOpen()) return true;
-  return false;
-}
+  success() {
+    this.state.failures = 0;
+    this.state.openUntil = 0;
+    this.state.probeInFlight = false;
+  }
 
-function circuitSuccess() {
-  readCircuit.failures = 0;
-  readCircuit.openUntil = 0;
-  readCircuit.halfOpen = false;
-}
-
-function circuitFailure() {
-  readCircuit.failures += 1;
-  readCircuit.halfOpen = false;
-  if (readCircuit.failures >= READ_FAILURE_THRESHOLD) readCircuit.openUntil = Date.now() + READ_OPEN_MS;
+  failure() {
+    this.state.failures += 1;
+    this.state.probeInFlight = false;
+    if (this.state.failures >= READ_FAILURE_THRESHOLD) this.state.openUntil = Date.now() + READ_OPEN_MS;
+  }
 }
 
 export class RazorpayProvider implements BillingProvider {
+  private readonly readCircuit = new ReadCircuitBreaker();
+
   constructor(
     private readonly keyId: string,
     private readonly keySecret: string,
@@ -78,7 +77,7 @@ export class RazorpayProvider implements BillingProvider {
   ) {}
 
   private async request(url: string, init: RequestInit, retryableRead = false): Promise<ProviderResult> {
-    if (retryableRead && !circuitPermit()) return { ok: false, status: 503, data: { error: { code: "PROVIDER_CIRCUIT_OPEN" } } };
+    if (retryableRead && !this.readCircuit.permit()) return { ok: false, status: 503, data: { error: { code: "PROVIDER_CIRCUIT_OPEN" } } };
     const auth = btoa(`${this.keyId}:${this.keySecret}`);
     const maxAttempts = retryableRead ? 3 : 1;
     const attemptTimeoutMs = retryableRead ? this.readTimeoutMs : this.timeoutMs;
@@ -107,8 +106,8 @@ export class RazorpayProvider implements BillingProvider {
           }
           lastResult = { ok: response.ok, status: response.status, data };
           if (!retryableRead || response.ok || (response.status !== 429 && response.status < 500) || attempt === maxAttempts - 1) {
-            if (retryableRead && response.ok) circuitSuccess();
-            else if (retryableRead && !response.ok) circuitFailure();
+            if (retryableRead && response.ok) this.readCircuit.success();
+            else if (retryableRead && !response.ok) this.readCircuit.failure();
             return lastResult;
           }
         } finally {
@@ -119,11 +118,11 @@ export class RazorpayProvider implements BillingProvider {
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     } catch (error) {
-      if (retryableRead) circuitFailure();
+      if (retryableRead) this.readCircuit.failure();
       throw error;
     }
 
-    if (retryableRead) circuitFailure();
+    if (retryableRead) this.readCircuit.failure();
     return lastResult;
   }
 
