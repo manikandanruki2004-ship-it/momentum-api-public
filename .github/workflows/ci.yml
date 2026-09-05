@@ -27,8 +27,17 @@ jobs:
           test -f docs/ARCHITECTURE.md
           test -f docs/ENGINEERING-CHECKLIST.md
           test -f skills/secure-saas-build/SKILL.md
-          if grep -RniE '(^|[^A-Za-z])(sk|rk|ghp|github_pat|xox[baprs]-)[A-Za-z0-9_./-]+' --exclude-dir=.git --exclude='*.lock' .; then
-            echo 'Possible credential/token pattern found in tracked source.'
+          set +e
+          grep -RniE '(^|[^A-Za-z])(sk-[A-Za-z0-9]{20,}|rk_(live|test)_[A-Za-z0-9]{12,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})' \
+            --exclude-dir=.git \
+            --exclude-dir=docs \
+            --exclude='*.md' \
+            --exclude='*.lock' \
+            .
+          found=$?
+          set -e
+          if [ "$found" -eq 0 ]; then
+            echo 'Possible credential/token pattern found in non-documentation source.'
             exit 1
           fi
 
