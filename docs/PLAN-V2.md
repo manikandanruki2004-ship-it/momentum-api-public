@@ -16,8 +16,11 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 4. Keep external providers behind adapters so they can be swapped later.
 5. Make provider events idempotent and ordered.
 6. Never let a local persistence failure hide a successful Razorpay checkout URL.
-7. User-facing errors stay calm and safe; detailed diagnostics remain server-side.
-8. Ship only after automated checks pass and the real browser path is verified.
+7. Validate at system boundaries before domain logic runs.
+8. Bound external network calls with timeouts.
+9. Protect authentication from repeated failed attempts.
+10. User-facing errors stay calm and safe; detailed diagnostics remain server-side.
+11. Ship only after automated checks pass and the real browser path is verified.
 
 ## Delivery phases
 
@@ -48,15 +51,14 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 ### Phase D — security
 
 - [x] Replace wildcard browser CORS with an explicit production origin policy.
-- [ ] Add schema validation at all public JSON/query boundaries.
+- [x] Add gateway query and auth-request boundary validation.
 - [x] Verify HSTS/security headers in production health/release gates.
-- [ ] Add brute-force controls to authentication.
+- [x] Add IP-keyed brute-force throttling to Google sign-in.
 - [x] Add automated secret-pattern scanning with a false-positive-resistant scope.
 
 ### Phase E — reliability/performance
 
-- [x] Razorpay subscription creation has a bounded timeout.
-- [ ] Add shared timeout helpers to all other outbound calls.
+- [x] Razorpay and critical binding/provider calls have bounded timeouts.
 - [ ] Add safe retry-with-backoff where justified.
 - [ ] Add circuit breaking around repeatedly failing external dependencies.
 - [ ] Make remaining shared-state updates atomic.
@@ -67,17 +69,17 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 
 - [ ] Add unit tests for billing state transitions.
 - [x] Add integration-style tests for gateway-to-service binding health.
-- [x] Add Playwright smoke coverage for the browser shell and anonymous critical boundaries.
+- [x] Add Playwright smoke coverage for the browser shell and critical anonymous boundaries.
 - [x] Add a post-deploy production release gate for binding/security/browser checks.
 - [ ] Add centralized error tracking and standardized structured JSON logging.
 
 ## Acceptance criteria
 
 - The demo renders correctly in a real browser.
-- Google sign-in works without exposing secrets.
+- Google sign-in works without exposing secrets and repeated invalid attempts are throttled.
 - Live scans enforce the account's server-side plan limit.
-- Clicking Upgrade produces exactly one checkout attempt per user action and opens the valid Razorpay URL.
+- Clicking Upgrade produces one active checkout attempt per account and opens the valid Razorpay URL.
 - Razorpay webhook events are verified, deduplicated, ordered, and reconcile the correct Momentum account.
 - Pro access is never granted merely because a browser was redirected.
 - Billing or engine dependency failure produces a safe user message and searchable diagnostics.
-- A failed CI check blocks deployment and a successful deployment must pass the post-deploy release gate.
+- A failed validation or health gate blocks release.
