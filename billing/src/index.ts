@@ -190,6 +190,62 @@ async function createCustomerSubscription(req: Request, env: Env, id: string) {
   }
 }
 
+async function refreshSubscription(req: Request, env: Env, id: string) {
+  const customer = await getSessionCustomer(req, env);
+  if (!customer || !customer.active) return json({ error: { code: "UNAUTHORIZED", message: "Valid active Momentum session required", request_id: id } }, 401, { "x-request-id": id });
+  if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) return json({ error: { code: "BILLING_NOT_CONFIGURED", message: "Razorpay status refresh is not configured", request_id: id } }, 503, { "x-request-id": id });
+
+  let sid: string | null = null;
+  const local = await env.DB.prepare("SELECT subscription_id FROM razorpay_subscriptions WHERE customer_id=? ORDER BY is_current DESC,updated_at DESC LIMIT 1").bind(customer.id).first<{ subscription_id: string }>();
+  if (local?.subscription_id) sid = local.subscription_id;
+  if (!sid) {
+    const attempt = await env.DB.prepare("SELECT subscription_id FROM razorpay_checkout_attempts WHERE customer_id=? AND status='created' AND subscription_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1").bind(customer.id).first<{ subscription_id: string }>();
+    sid = attempt?.subscription_id ?? null;
+  }
+  if (!sid) return json({ status: "not_found", tier: customer.tier, active: Number(customer.active) === 1, request_id: id }, 200, { "x-request-id": id, "cache-control": "no-store" });
+
+  try {
+    const provider = new RazorpayProvider(env.RAZORPAY_KEY_ID, env.RAZORPAY_KEY_SECRET, 8000);
+    const result = await provider.getSubscription(sid);
+    const data = result.data;
+    if (!result.ok || !data.id) {
+      const retryable = result.status >= 500 || result.status === 429;
+      console.error("Razorpay subscription refresh failed", { request_id: id, customer_id: customer.id, subscription_id: sid, status: result.status });
+      return json({ error: { code: retryable ? "RAZORPAY_STATUS_UNAVAILABLE" : "RAZORPAY_STATUS_FAILED", message: retryable ? "Razorpay status is temporarily unavailable. Try again shortly." : "Razorpay could not return this subscription.", request_id: id } }, retryable ? 504 : 502, { "x-request-id": id, ...(retryable ? { "retry-after": "5" } : {}) });
+    }
+
+    const planId = String(data.plan_id ?? "");
+    if (!tierFor(env, planId)) return json({ error: { code: "UNKNOWN_PLAN", message: "Subscription is not a recognized Momentum Pro plan", request_id: id } }, 409, { "x-request-id": id });
+    const status = String(data.status ?? "unknown");
+    const active = status === "active";
+    const suspended = ["pending", "halted", "paused"].includes(status);
+    const terminal = ["cancelled", "completed", "expired"].includes(status);
+    const customerId = customer.id;
+    const rpc = data.customer_id ? String(data.customer_id) : null;
+    const stamp = Math.floor(Date.now() / 1000);
+
+    if (active) {
+      await storeUnclaimed(env, sid, rpc, planId, status, data.current_start, data.current_end, stamp, normalizeEmail(customer.email));
+      await attachSubscription(env, sid, customerId, status, data.current_start, data.current_end, stamp, `status_${crypto.randomUUID()}`, rpc, true);
+    } else if (terminal) {
+      await env.DB.prepare(`UPDATE razorpay_subscriptions SET status=?,razorpay_customer_id=COALESCE(?,razorpay_customer_id),current_start=COALESCE(?,current_start),current_end=COALESCE(?,current_end),ended_at=COALESCE(ended_at,?),updated_at=?,is_current=0 WHERE subscription_id=? AND customer_id=?`).bind(status, rpc, data.current_start ?? null, data.current_end ?? null, data.ended_at ?? stamp, nowIso(), sid, customerId).run();
+      await syncFree(env, customerId);
+    } else if (suspended) {
+      await env.DB.prepare(`UPDATE razorpay_subscriptions SET status=?,razorpay_customer_id=COALESCE(?,razorpay_customer_id),current_start=COALESCE(?,current_start),current_end=COALESCE(?,current_end),suspended_at=COALESCE(suspended_at,?),updated_at=? WHERE subscription_id=? AND customer_id=?`).bind(status, rpc, data.current_start ?? null, data.current_end ?? null, stamp, nowIso(), sid, customerId).run();
+      if (customer.tier === "pro") await syncPro(env, customerId, false);
+    } else {
+      await storeUnclaimed(env, sid, rpc, planId, status, data.current_start, data.current_end, stamp, normalizeEmail(customer.email));
+    }
+
+    const refreshed = await env.DB.prepare("SELECT tier,active FROM customers WHERE id=? LIMIT 1").bind(customerId).first<{ tier: string; active: number }>();
+    return json({ status, subscription_id: sid, razorpay_customer_id: rpc, tier: refreshed?.tier ?? customer.tier, active: Number(refreshed?.active ?? customer.active) === 1, synchronized: active || suspended || terminal, request_id: id }, 200, { "x-request-id": id, "cache-control": "no-store" });
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === "AbortError";
+    console.error("Razorpay subscription refresh provider failure", { request_id: id, customer_id: customer.id, subscription_id: sid, timeout: timedOut, error: error instanceof Error ? error.message : String(error) });
+    return json({ error: { code: timedOut ? "RAZORPAY_TIMEOUT" : "RAZORPAY_UNAVAILABLE", message: timedOut ? "Razorpay status refresh timed out. Please try again." : "Razorpay status refresh is temporarily unavailable. Please try again.", request_id: id } }, 504, { "x-request-id": id, "retry-after": "5" });
+  }
+}
+
 async function claimSubscription(req: Request, env: Env, id: string) {
   const customer = await getSessionCustomer(req, env);
   if (!customer || !customer.active) return json({ error: { code: "UNAUTHORIZED", message: "Valid active Momentum session required", request_id: id } }, 401, { "x-request-id": id });
@@ -214,8 +270,9 @@ export default {
   async fetch(req: Request, env: Env) {
     const id = requestId(), u = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204 });
-    if (u.pathname === "/health" && req.method === "GET") return json({ status: "ok", service: "momentum-billing", release: "checkout-idempotency-v2" }, 200, { "x-request-id": id });
+    if (u.pathname === "/health" && req.method === "GET") return json({ status: "ok", service: "momentum-billing", release: "checkout-status-v1" }, 200, { "x-request-id": id });
     if (u.pathname === "/billing/checkout" && req.method === "POST") return createCustomerSubscription(req, env, id);
+    if (u.pathname === "/billing/status" && req.method === "GET") return refreshSubscription(req, env, id);
     if (u.pathname === "/billing/claim" && req.method === "POST") return claimSubscription(req, env, id);
     if (u.pathname === "/webhooks/razorpay" && req.method === "POST") return webhook(req, env, id);
     return json({ error: { code: "NOT_FOUND", message: "Route not found", request_id: id } }, 404, { "x-request-id": id });
