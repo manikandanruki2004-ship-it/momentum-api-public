@@ -63,8 +63,8 @@ jobs:
       - name: Validate webhook atomicity
         run: node tools/validate-webhook-atomicity.mjs
 
-      - name: Validate migration synchronization
-        run: node tools/validate-migration-sync.mjs
+      - name: Validate D1 migration contract
+        run: node tools/check-migration-contract.mjs
 
       - name: Install gateway dependencies
         working-directory: worker
