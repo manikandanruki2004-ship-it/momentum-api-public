@@ -84,19 +84,19 @@ jobs:
           DB_NAME="momentum-production"
           KV_TITLE="momentum-rate-limit"
           AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json")
-          curl --fail-with-body --silent --show-error "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" > /tmp/d1-list.json
+          curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" > /tmp/d1-list.json
           jq -e '.success == true' /tmp/d1-list.json >/dev/null
           DB_ID="$(jq -r --arg name "$DB_NAME" '.result[] | select(.name == $name) | .uuid' /tmp/d1-list.json | head -n 1)"
           if [ -z "$DB_ID" ]; then
-            curl --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" --data "{\"name\":\"${DB_NAME}\"}" > /tmp/d1-create.json
+            curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" --data "{\"name\":\"${DB_NAME}\"}" > /tmp/d1-create.json
             jq -e '.success == true' /tmp/d1-create.json >/dev/null
             DB_ID="$(jq -r '.result.uuid // empty' /tmp/d1-create.json)"
           fi
-          curl --fail-with-body --silent --show-error "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" > /tmp/kv-list.json
+          curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" > /tmp/kv-list.json
           jq -e '.success == true' /tmp/kv-list.json >/dev/null
           KV_ID="$(jq -r --arg title "$KV_TITLE" '.result[] | select(.title == $title) | .id' /tmp/kv-list.json | head -n 1)"
           if [ -z "$KV_ID" ]; then
-            curl --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" --data "{\"title\":\"${KV_TITLE}\"}" > /tmp/kv-create.json
+            curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" --data "{\"title\":\"${KV_TITLE}\"}" > /tmp/kv-create.json
             jq -e '.success == true' /tmp/kv-create.json >/dev/null
             KV_ID="$(jq -r '.result.id // empty' /tmp/kv-create.json)"
           fi
@@ -131,13 +131,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: _private-engine/worker
-        run: npx wrangler d1 migrations apply momentum-production --remote --config wrangler.deploy.json
+        run: npx --yes wrangler@4.129.0 d1 migrations apply momentum-production --remote --config wrangler.deploy.json
       - name: Deploy private engine
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: _private-engine/worker
-        run: npx wrangler deploy --config wrangler.deploy.json
+        run: npx --yes wrangler@4.129.0 deploy --config wrangler.deploy.json
       - name: Install private Worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -148,9 +148,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' "$MOMENTUM_GITHUB_TOKEN" | npx wrangler secret put GITHUB_TOKEN --config wrangler.deploy.json
-          printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json
-          printf '%s' "$MOMENTUM_ADMIN_SECRET" | npx wrangler secret put ADMIN_SECRET --config wrangler.deploy.json
+          printf '%s' "$MOMENTUM_GITHUB_TOKEN" | npx --yes wrangler@4.129.0 secret put GITHUB_TOKEN --config wrangler.deploy.json
+          printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx --yes wrangler@4.129.0 secret put API_KEY_PEPPER --config wrangler.deploy.json
+          printf '%s' "$MOMENTUM_ADMIN_SECRET" | npx --yes wrangler@4.129.0 secret put ADMIN_SECRET --config wrangler.deploy.json
       - name: Create billing Worker config
         working-directory: billing
         run: |
@@ -165,7 +165,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: billing
-        run: npx wrangler deploy --config wrangler.deploy.json
+        run: npx --yes wrangler@4.129.0 deploy --config wrangler.deploy.json
       - name: Install billing Worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -183,13 +183,13 @@ jobs:
           set -euo pipefail
           test -n "$RAZORPAY_KEY_ID"
           test -n "$RAZORPAY_KEY_SECRET"
-          if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json; fi
-          if [ -n "$RAZORPAY_TEST_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_TEST_WEBHOOK_SECRET" | npx wrangler secret put RAZORPAY_TEST_WEBHOOK_SECRET --config wrangler.deploy.json; fi
-          if [ -n "$RAZORPAY_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json; fi
-          if [ -n "$RAZORPAY_TEST_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_TEST_PRO_PLAN_ID" | npx wrangler secret put RAZORPAY_TEST_PRO_PLAN_ID --config wrangler.deploy.json; fi
-          printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json
-          printf '%s' "$RAZORPAY_KEY_ID" | npx wrangler secret put RAZORPAY_KEY_ID --config wrangler.deploy.json
-          printf '%s' "$RAZORPAY_KEY_SECRET" | npx wrangler secret put RAZORPAY_KEY_SECRET --config wrangler.deploy.json
+          if [ -n "$RAZORPAY_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_WEBHOOK_SECRET" | npx --yes wrangler@4.129.0 secret put RAZORPAY_WEBHOOK_SECRET --config wrangler.deploy.json; fi
+          if [ -n "$RAZORPAY_TEST_WEBHOOK_SECRET" ]; then printf '%s' "$RAZORPAY_TEST_WEBHOOK_SECRET" | npx --yes wrangler@4.129.0 secret put RAZORPAY_TEST_WEBHOOK_SECRET --config wrangler.deploy.json; fi
+          if [ -n "$RAZORPAY_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_PRO_PLAN_ID" | npx --yes wrangler@4.129.0 secret put RAZORPAY_PRO_PLAN_ID --config wrangler.deploy.json; fi
+          if [ -n "$RAZORPAY_TEST_PRO_PLAN_ID" ]; then printf '%s' "$RAZORPAY_TEST_PRO_PLAN_ID" | npx --yes wrangler@4.129.0 secret put RAZORPAY_TEST_PRO_PLAN_ID --config wrangler.deploy.json; fi
+          printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx --yes wrangler@4.129.0 secret put API_KEY_PEPPER --config wrangler.deploy.json
+          printf '%s' "$RAZORPAY_KEY_ID" | npx --yes wrangler@4.129.0 secret put RAZORPAY_KEY_ID --config wrangler.deploy.json
+          printf '%s' "$RAZORPAY_KEY_SECRET" | npx --yes wrangler@4.129.0 secret put RAZORPAY_KEY_SECRET --config wrangler.deploy.json
       - name: Create Google auth Worker config
         working-directory: auth
         run: |
@@ -204,11 +204,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: auth
-        run: npx wrangler deploy --config wrangler.deploy.json
+        run: npx --yes wrangler@4.129.0 deploy --config wrangler.deploy.json
       - name: Install Google auth Worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           MOMENTUM_API_KEY_PEPPER: ${{ secrets.MOMENTUM_API_KEY_PEPPER }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         working-directory: auth
@@ -216,12 +215,11 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$GOOGLE_CLIENT_ID"
-          printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx wrangler secret put API_KEY_PEPPER --config wrangler.deploy.json
-          printf '%s' "$GOOGLE_CLIENT_ID" | npx wrangler secret put GOOGLE_CLIENT_ID --config wrangler.deploy.json
+          printf '%s' "$MOMENTUM_API_KEY_PEPPER" | npx --yes wrangler@4.129.0 secret put API_KEY_PEPPER --config wrangler.deploy.json
+          printf '%s' "$GOOGLE_CLIENT_ID" | npx --yes wrangler@4.129.0 secret put GOOGLE_CLIENT_ID --config wrangler.deploy.json
       - name: Deploy public gateway
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           RAZORPAY_SUBSCRIPTION_URL: ${{ vars.RAZORPAY_SUBSCRIPTION_URL }}
         working-directory: worker
         shell: bash
@@ -232,54 +230,56 @@ jobs:
             https://rzp.io/*|https://pages.razorpay.com/*) ;;
             *) echo "RAZORPAY_SUBSCRIPTION_URL must be a Razorpay hosted URL"; exit 1 ;;
           esac
-          npx wrangler deploy --var "RAZORPAY_SUBSCRIPTION_URL:${RAZORPAY_SUBSCRIPTION_URL}"
+          npx --yes wrangler@4.129.0 deploy --var "RAZORPAY_SUBSCRIPTION_URL:${RAZORPAY_SUBSCRIPTION_URL}"
       - name: Smoke test public gateway
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           BASE_URL="https://momentum-api-public.manikandanruki2004.workers.dev"
           check_status() { [ "$1" = "$2" ] || { echo "Expected HTTP $2, got $1"; exit 1; }; }
+          get_json() { curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$1"; }
+          get_status() { curl --connect-timeout 10 --max-time 30 --silent --show-error --output "$2" --write-out '%{http_code}' --retry 5 --retry-delay 3 "$1"; }
           echo "== health =="
-          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/health" | tee /tmp/health.json
+          get_json "$BASE_URL/health" | tee /tmp/health.json
           jq -e '.status == "ok" and .service == "momentum-api-public" and .engine == "service-binding" and .billing == "service-binding" and .auth == "service-binding"' /tmp/health.json >/dev/null
           echo "== version =="
-          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/version" | tee /tmp/version.json
+          get_json "$BASE_URL/version" | tee /tmp/version.json
           jq -e '.name == "Momentum API" and .version == "1.7.0" and .billing == "1.3.1" and .auth == "1.2.0"' /tmp/version.json >/dev/null
           echo "== billing health =="
-          BILLING_HEALTH_STATUS="$(curl --silent --show-error --output /tmp/billing-health.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/billing/health")"
+          BILLING_HEALTH_STATUS="$(get_status "$BASE_URL/billing/health" /tmp/billing-health.json)"
           echo "HTTP $BILLING_HEALTH_STATUS"; cat /tmp/billing-health.json; echo
           check_status "$BILLING_HEALTH_STATUS" "200"
           jq -e '.status == "ok" and .service == "momentum-billing"' /tmp/billing-health.json >/dev/null
           echo "== auth health =="
-          AUTH_HEALTH_STATUS="$(curl --silent --show-error --output /tmp/auth-health.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/auth/health")"
+          AUTH_HEALTH_STATUS="$(get_status "$BASE_URL/auth/health" /tmp/auth-health.json)"
           echo "HTTP $AUTH_HEALTH_STATUS"; cat /tmp/auth-health.json; echo
           check_status "$AUTH_HEALTH_STATUS" "200"
           jq -e '.status == "ok" and .service == "momentum-auth"' /tmp/auth-health.json >/dev/null
           echo "== auth credential validation =="
-          AUTH_STATUS="$(curl --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/auth/google" -H 'Content-Type: application/json' -d '{}')"
+          AUTH_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/auth/google" -H 'Content-Type: application/json' -d '{}')"
           echo "HTTP $AUTH_STATUS"; cat /tmp/auth.json; echo
           check_status "$AUTH_STATUS" "401"
           jq -e '.error.code == "INVALID_CREDENTIAL"' /tmp/auth.json >/dev/null
           echo "== auth session protection =="
-          AUTH_ME_STATUS="$(curl --silent --show-error --output /tmp/auth-me.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/auth/me")"
+          AUTH_ME_STATUS="$(get_status "$BASE_URL/auth/me" /tmp/auth-me.json)"
           echo "HTTP $AUTH_ME_STATUS"; cat /tmp/auth-me.json; echo
           check_status "$AUTH_ME_STATUS" "401"
           jq -e '.error.code == "UNAUTHORIZED"' /tmp/auth-me.json >/dev/null
           echo "== account protection =="
-          ME_STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' --retry 5 --retry-delay 3 "$BASE_URL/v1/me")"
+          ME_STATUS="$(get_status "$BASE_URL/v1/me" /tmp/me.json)"
           echo "HTTP $ME_STATUS"; cat /tmp/me.json; echo
           check_status "$ME_STATUS" "401"
           jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
           echo "== webhook boundary =="
-          BILLING_STATUS="$(curl --silent --show-error --output /tmp/razorpay.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/webhooks/razorpay" -H 'Content-Type: application/json' -d '{}')"
+          BILLING_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/razorpay.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/webhooks/razorpay" -H 'Content-Type: application/json' -d '{}')"
           echo "HTTP $BILLING_STATUS"; cat /tmp/razorpay.json; echo
           test "$BILLING_STATUS" = "401" -o "$BILLING_STATUS" = "503" || { echo "Unexpected webhook status"; exit 1; }
           echo "== claim boundary =="
-          CLAIM_STATUS="$(curl --silent --show-error --output /tmp/claim.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/billing/claim" -H 'Content-Type: application/json' -d '{}')"
+          CLAIM_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/claim.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/billing/claim" -H 'Content-Type: application/json' -d '{}')"
           echo "HTTP $CLAIM_STATUS"; cat /tmp/claim.json; echo
           test "$CLAIM_STATUS" = "401" -o "$CLAIM_STATUS" = "503" || { echo "Unexpected claim status"; exit 1; }
           echo "== checkout redirect =="
-          CHECKOUT_STATUS="$(curl --silent --show-error --output /tmp/checkout.html --write-out '%{http_code}' --max-redirs 0 --retry 5 --retry-delay 3 "$BASE_URL/billing/checkout")"
+          CHECKOUT_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/checkout.html --write-out '%{http_code}' --max-redirs 0 --retry 5 --retry-delay 3 "$BASE_URL/billing/checkout")"
           echo "HTTP $CHECKOUT_STATUS"; cat /tmp/checkout.html; echo
           check_status "$CHECKOUT_STATUS" "302"
           echo "Public Momentum stack smoke checks passed."
