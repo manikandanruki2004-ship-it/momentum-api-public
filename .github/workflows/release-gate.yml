@@ -1,0 +1,62 @@
+name: Production Release Gate
+
+on:
+  workflow_run:
+    workflows: ["Deploy Momentum Stack"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify public gateway and service bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
+
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 \
+            -D /tmp/headers.txt "$BASE/health" -o /tmp/health.json
+          jq -e '.status == "ok" and .service == "momentum-api-public" and .billing == "service-binding" and .auth == "service-binding" and .engine == "service-binding"' /tmp/health.json >/dev/null
+          grep -qi '^strict-transport-security:' /tmp/headers.txt
+          grep -qi '^x-content-type-options:' /tmp/headers.txt
+          grep -qi '^x-request-id:' /tmp/headers.txt
+
+      - name: Verify billing binding directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
+          STATUS="$(curl --silent --show-error --output /tmp/billing.json --write-out '%{http_code}' \
+            --retry 5 --retry-delay 2 "$BASE/billing/health")"
+          test "$STATUS" = "200"
+          jq -e '.status == "ok" and .service == "momentum-billing"' /tmp/billing.json >/dev/null
+
+      - name: Verify protected route boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
+          STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' \
+            --retry 5 --retry-delay 2 "$BASE/auth/me")"
+          test "$STATUS" = "401"
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
+
+          STATUS="$(curl --silent --show-error --output /tmp/live.json --write-out '%{http_code}' \
+            --retry 5 --retry-delay 2 "$BASE/v1/momentum")"
+          test "$STATUS" = "401"
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/live.json >/dev/null
+
+      - name: Verify deployed browser bundle contains release marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAGE="https://therandomhuman-hub.github.io/momentum-api-public/"
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 "$PAGE" -o /tmp/page.html
+          grep -q 'Momentum API' /tmp/page.html
+          grep -q 'Upgrade to Pro' /tmp/page.html
