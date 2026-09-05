@@ -44,7 +44,7 @@ test("RazorpayProvider fetches an existing subscription through the adapter", as
 
 test("RazorpayProvider treats provider 4xx reads as non-transient", async () => {
   let calls = 0;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async () => {
+  const provider = new RazorpayProvider("rzp_4xx", "secret", 1000, 2500, async () => {
     calls += 1;
     return new Response(JSON.stringify({ error: { code: "SUBSCRIPTION_NOT_FOUND" } }), { status: 404 });
   });
@@ -59,9 +59,29 @@ test("RazorpayProvider treats provider 4xx reads as non-transient", async () => 
   assert.equal(calls, 2);
 });
 
+test("RazorpayProvider shares read circuit state across provider instances using the same transport", async () => {
+  let calls = 0;
+  const failingFetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ error: { code: "TEMPORARY" } }), { status: 503 });
+  };
+  const first = new RazorpayProvider("rzp_shared", "secret", 1000, 2500, failingFetch);
+  const second = new RazorpayProvider("rzp_shared", "secret", 1000, 2500, failingFetch);
+
+  await first.getSubscription("sub_shared_a");
+  await first.getSubscription("sub_shared_b");
+  await first.getSubscription("sub_shared_c");
+  const before = calls;
+  const blocked = await second.getSubscription("sub_shared_d");
+
+  assert.equal(calls, before);
+  assert.equal(blocked.status, 503);
+  assert.equal(blocked.data.error?.code, "PROVIDER_CIRCUIT_OPEN");
+});
+
 test("RazorpayProvider retries transient failures for subscription reads", async () => {
   let calls = 0;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async (_url, init) => {
+  const provider = new RazorpayProvider("rzp_retry", "secret", 1000, 2500, async (_url, init) => {
     assert.equal(init?.method, "GET");
     calls += 1;
     if (calls < 3) return new Response(JSON.stringify({ error: { code: "TEMPORARY" } }), { status: 503 });
@@ -76,7 +96,7 @@ test("RazorpayProvider retries transient failures for subscription reads", async
 
 test("RazorpayProvider retries rate-limited subscription reads", async () => {
   let calls = 0;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async (_url, init) => {
+  const provider = new RazorpayProvider("rzp_429", "secret", 1000, 2500, async (_url, init) => {
     assert.equal(init?.method, "GET");
     calls += 1;
     return new Response(JSON.stringify({ error: { code: "RATE_LIMIT" } }), { status: 429 });
@@ -90,7 +110,7 @@ test("RazorpayProvider retries rate-limited subscription reads", async () => {
 
 test("RazorpayProvider does not retry non-retryable billing failures", async () => {
   let calls = 0;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async () => {
+  const provider = new RazorpayProvider("rzp_mutation", "secret", 1000, 2500, async () => {
     calls += 1;
     return new Response(JSON.stringify({ error: { code: "BAD_REQUEST", description: "invalid plan" } }), { status: 400 });
   });
@@ -103,7 +123,7 @@ test("RazorpayProvider does not retry non-retryable billing failures", async () 
 
 test("RazorpayProvider rejects malformed subscription ids before network access", async () => {
   let called = false;
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async () => {
+  const provider = new RazorpayProvider("rzp_invalid", "secret", 1000, 2500, async () => {
     called = true;
     return new Response("should not be called", { status: 500 });
   });
@@ -116,7 +136,7 @@ test("RazorpayProvider rejects malformed subscription ids before network access"
 });
 
 test("RazorpayProvider preserves provider failures", async () => {
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async () => {
+  const provider = new RazorpayProvider("rzp_failure", "secret", 1000, 2500, async () => {
     return new Response(JSON.stringify({ error: { code: "BAD_REQUEST", description: "invalid plan" } }), {
       status: 400,
       headers: { "content-type": "application/json" },
@@ -130,7 +150,7 @@ test("RazorpayProvider preserves provider failures", async () => {
 });
 
 test("RazorpayProvider aborts a provider call after the configured timeout", async () => {
-  const provider = new RazorpayProvider("rzp_test", "secret", 20, 2500, async (_url, init) => {
+  const provider = new RazorpayProvider("rzp_timeout", "secret", 20, 2500, async (_url, init) => {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(resolve, 200);
       init?.signal?.addEventListener("abort", () => {
@@ -153,7 +173,7 @@ test("RazorpayProvider opens its read circuit after repeated failures", async ()
     calls += 1;
     return new Response(JSON.stringify({ error: { code: "TEMPORARY" } }), { status: 503 });
   };
-  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, failingFetch);
+  const provider = new RazorpayProvider("rzp_circuit", "secret", 1000, 2500, failingFetch);
 
   await provider.getSubscription("sub_a");
   await provider.getSubscription("sub_b");
