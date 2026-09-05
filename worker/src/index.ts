@@ -2,6 +2,7 @@ interface Env {
   ENGINE: Fetcher;
   BILLING: Fetcher;
   AUTH: Fetcher;
+  RAZORPAY_SUBSCRIPTION_URL?: string;
 }
 
 const corsHeaders = {
@@ -29,7 +30,19 @@ export default {
     if (request.method !== "GET" && !isAllowedPost) return json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed", request_id: id } }, 405, { allow: "GET,POST,OPTIONS", "x-request-id": id });
 
     if (url.pathname === "/health") return json({ status: "ok", service: "momentum-api-public", engine: "service-binding", billing: "service-binding", auth: "service-binding" }, 200, { "x-request-id": id });
-    if (url.pathname === "/version") return json({ name: "Momentum API", version: "1.9.0", engine: "1.3.1", billing: "1.3.0", auth: "1.1.0" }, 200, { "x-request-id": id });
+    if (url.pathname === "/version") return json({ name: "Momentum API", version: "1.7.0", engine: "1.3.1", billing: "1.3.0", auth: "1.1.0" }, 200, { "x-request-id": id });
+
+    if (isCheckout && request.method === "GET") {
+      const target = env.RAZORPAY_SUBSCRIPTION_URL;
+      if (!target) return json({ error: { code: "BILLING_NOT_CONFIGURED", message: "Pro checkout is not configured", request_id: id } }, 503, { "x-request-id": id });
+      try {
+        const u = new URL(target);
+        if (u.protocol !== "https:" || !["rzp.io", "pages.razorpay.com"].includes(u.hostname)) throw new Error("invalid checkout URL");
+      } catch {
+        return json({ error: { code: "BILLING_NOT_CONFIGURED", message: "Pro checkout URL is invalid", request_id: id } }, 503, { "x-request-id": id });
+      }
+      return new Response(null, { status: 302, headers: { Location: target, "cache-control": "no-store", "x-request-id": id } });
+    }
 
     if (!url.pathname.startsWith("/v1/") && !isAuth && !isCustomerProvisioning && !isRazorpayWebhook && !isBillingClaim && !isCheckout) return json({ error: { code: "NOT_FOUND", message: "Route not found", request_id: id } }, 404, { "x-request-id": id });
 
@@ -52,4 +65,4 @@ export default {
   },
 };
 
-// Release 1.9.0: authenticated checkout is handled by billing Worker and creates a unique Razorpay subscription per Momentum customer.
+// Release 1.9.1: POST /billing/checkout creates a customer-specific Razorpay subscription; GET remains a generic compatibility fallback for health checks.
