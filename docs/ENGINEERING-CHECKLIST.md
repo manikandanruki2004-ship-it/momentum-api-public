@@ -19,7 +19,7 @@ This is the implementation checklist derived from the supplied engineering-block
 
 ## AI workflow
 
-- [x] Root `CLAUDE.md` contains durable project rules.
+- [x] Root `CLAUDE.md` contains durable AI/build rules.
 - [x] Architecture and decisions live in `docs/`.
 - [x] Reusable procedures live under `skills/` where they repeat.
 
@@ -59,6 +59,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Provider failures are translated into safe user errors.
 - [x] Google signing-key fetches and binding health probes have bounded timeouts.
 - [x] Razorpay subscription creation has an 8-second provider timeout through the billing adapter.
+- [x] Provider subscription reads are behind the same billing adapter and have bounded timeouts.
 - [ ] Add retry-with-backoff only to safe/idempotent provider reads and mutations.
 - [ ] Add a small circuit-breaker abstraction for repeatedly failing external dependencies.
 - [x] Provider event IDs are used for webhook deduplication.
@@ -88,12 +89,12 @@ This is the implementation checklist derived from the supplied engineering-block
 
 - [x] Typechecks run for core Workers during CI/deployment.
 - [x] Engineering-contract checks run in CI.
-- [x] Billing provider unit tests cover success, provider failure, and timeout behavior.
+- [x] Billing provider unit tests cover create, read, failure, malformed-id, and timeout behavior.
 - [x] Add integration-style health checks for binding-to-service paths.
 - [x] Add Playwright browser smoke coverage for the public demo and critical anonymous boundaries.
 - [x] CI/CD deployment exists.
 - [x] Deployment smoke tests verify gateway version plus direct billing/auth binding health.
-- [x] Post-deploy production release gate verifies the deployed gateway, bindings, security headers, protected routes, and browser bundle.
+- [x] Post-deploy production release gate verifies the deployed gateway, bindings, security headers, protected routes, and current browser UI markers.
 - [x] Production health endpoints exist for the gateway, billing, and auth services.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
 
@@ -102,6 +103,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Create a `BillingProvider` interface.
 - [x] Implement Razorpay behind the provider interface.
 - [x] Keep provider URLs out of presentation logic except for the validated hosted checkout destination.
+- [x] Keep subscription lookup behind the provider interface rather than direct external calls in route logic.
 - [ ] Make provider failover possible without changing the public API contract.
 
 ## Browser verification
