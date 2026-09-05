@@ -60,7 +60,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Google signing-key fetches and binding health probes have bounded timeouts.
 - [x] Razorpay subscription creation has an 8-second provider timeout through the billing adapter.
 - [x] Provider subscription reads are behind the same billing adapter and have bounded timeouts.
-- [ ] Add retry-with-backoff only to safe/idempotent provider reads and mutations.
+- [x] Retry-with-backoff is limited to the idempotent Razorpay subscription read path and capped at a small number of attempts.
 - [ ] Add a small circuit-breaker abstraction for repeatedly failing external dependencies.
 - [x] Provider event IDs are used for webhook deduplication.
 - [x] Checkout persistence failure cannot hide a successfully created Razorpay checkout URL.
@@ -90,7 +90,7 @@ This is the implementation checklist derived from the supplied engineering-block
 
 - [x] Typechecks run for core Workers during CI/deployment.
 - [x] Engineering-contract checks run in CI.
-- [x] Billing provider unit tests cover create, read, failure, malformed-id, and timeout behavior.
+- [x] Billing provider unit tests cover create, read, failure, malformed-id, timeout, and bounded-retry behavior.
 - [x] Add integration-style health checks for binding-to-service paths.
 - [x] Add Playwright smoke coverage for the public demo and critical anonymous boundaries.
 - [x] CI/CD deployment exists.
