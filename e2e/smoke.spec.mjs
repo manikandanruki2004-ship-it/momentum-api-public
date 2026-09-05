@@ -27,6 +27,12 @@ test("gateway protected routes reject anonymous calls safely", async ({ request 
   const body = await response.json();
   expect(body.error?.code).toBe("UNAUTHORIZED");
   expect(body.error?.request_id).toBeTruthy();
+
+  const billingStatus = await request.get(`${API}/billing/status`);
+  expect(billingStatus.status()).toBe(401);
+  const billingBody = await billingStatus.json();
+  expect(billingBody.error?.code).toBe("UNAUTHORIZED");
+  expect(billingBody.error?.request_id).toBeTruthy();
 });
 
 test("gateway rejects invalid momentum query parameters at the boundary", async ({ request }) => {
