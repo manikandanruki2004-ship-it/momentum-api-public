@@ -8,6 +8,18 @@
   "vars": {
     "PUBLIC_APP_ORIGIN": "https://therandomhuman-hub.github.io"
   },
+  "ratelimits": [
+    {
+      "name": "PUBLIC_IP_RATE_LIMIT",
+      "namespace_id": "2101",
+      "simple": { "limit": 120, "period": 60 }
+    },
+    {
+      "name": "AUTH_IP_RATE_LIMIT",
+      "namespace_id": "2102",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "services": [
     { "binding": "ENGINE", "service": "momentum-engine" },
     { "binding": "BILLING", "service": "momentum-billing" },
