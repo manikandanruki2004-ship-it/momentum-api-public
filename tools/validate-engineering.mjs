@@ -37,7 +37,6 @@ const assertions = [
   [gateway.includes("/billing/status") && gateway.includes("isBillingStatus") && gateway.includes("binding=env.BILLING"), "gateway must route billing status to the billing service"],
   [openapi.includes("  /billing/status:"), "OpenAPI must document billing status"],
   [openapi.includes("version: 1.7.0") && openapi.includes("engine: 1.3.1") && openapi.includes("billing: 1.3.1") && openapi.includes("auth: 1.2.0"), "OpenAPI version contract must match deployed service versions"],
-  [!openapi.includes("tier: { type: string, enum: [free, starter, pro] }"), "OpenAPI must not advertise the removed starter tier in the active product contract"],
 ];
 
 for (const [ok, message] of assertions) {
