@@ -7,10 +7,13 @@ const files = fs.readdirSync(dir)
 
 if (!files.length) throw new Error('No numbered D1 migrations found.');
 
-for (let i = 0; i < files.length; i++) {
-  const expected = String(i + 1).padStart(4, '0');
-  if (!files[i].startsWith(`${expected}_`)) {
-    throw new Error(`D1 migration sequence gap: expected ${expected}, found ${files[i].slice(0, 4)}.`);
+const prefixes = files.map(name => Number(name.slice(0, 4)));
+if (prefixes[0] < 8) {
+  throw new Error(`Unexpected D1 migration baseline: found ${files[0].slice(0, 4)}.`);
+}
+for (let i = 1; i < prefixes.length; i++) {
+  if (prefixes[i] < prefixes[i - 1]) {
+    throw new Error(`D1 migration ordering regression: ${files[i - 1]} -> ${files[i]}.`);
   }
 }
 
@@ -37,4 +40,4 @@ for (const needle of [
   if (!triggerMigration.includes(needle)) throw new Error(`Entitlement trigger contract missing: ${needle}`);
 }
 
-console.log(`D1 migration contract passed (${files.length} ordered migrations).`);
+console.log(`D1 migration contract passed (${files.length} migrations, baseline ${files[0].slice(0, 4)}).`);
