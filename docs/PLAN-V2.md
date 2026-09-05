@@ -26,6 +26,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 14. Keep the public API documentation synchronized with the actual gateway and billing route surface.
 15. Keep retry behavior inside the provider adapter so route logic cannot accidentally retry a remote mutation.
 16. Keep cumulative retry latency inside the caller's request budget by using a shorter timeout for retried provider reads.
+17. Keep production billing secret synchronization inside the primary deployment workflow; avoid autonomous post-deploy secret-repair workflows that can hide a failed deployment state.
 
 ## Delivery phases
 
