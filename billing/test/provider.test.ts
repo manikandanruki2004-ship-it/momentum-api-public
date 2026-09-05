@@ -49,6 +49,34 @@ test("RazorpayProvider fetches an existing subscription through the adapter", as
   assert.equal(result.data.customer_id, "cust_rzp_test");
 });
 
+test("RazorpayProvider retries transient failures for subscription reads", async () => {
+  let calls = 0;
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async (_url, init) => {
+    assert.equal(init?.method, "GET");
+    calls += 1;
+    if (calls < 3) return new Response(JSON.stringify({ error: { code: "TEMPORARY" } }), { status: 503 });
+    return new Response(JSON.stringify({ id: "sub_test", status: "active", plan_id: "plan_test" }), { status: 200 });
+  });
+
+  const result = await provider.getSubscription("sub_test");
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 200);
+  assert.equal(calls, 3);
+});
+
+test("RazorpayProvider does not retry non-retryable billing failures", async () => {
+  let calls = 0;
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ error: { code: "BAD_REQUEST", description: "invalid plan" } }), { status: 400 });
+  });
+
+  const result = await provider.createSubscription(payload);
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 400);
+  assert.equal(calls, 1);
+});
+
 test("RazorpayProvider rejects malformed subscription ids before network access", async () => {
   let called = false;
   const provider = new RazorpayProvider("rzp_test", "secret", 1000, async () => {
