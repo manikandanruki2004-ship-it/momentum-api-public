@@ -42,6 +42,23 @@ test("RazorpayProvider fetches an existing subscription through the adapter", as
   assert.equal(result.data.customer_id, "cust_rzp_test");
 });
 
+test("RazorpayProvider treats provider 4xx reads as non-transient", async () => {
+  let calls = 0;
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ error: { code: "SUBSCRIPTION_NOT_FOUND" } }), { status: 404 });
+  });
+
+  const result = await provider.getSubscription("sub_not_found");
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 404);
+  assert.equal(calls, 1);
+
+  const second = await provider.getSubscription("sub_not_found_2");
+  assert.equal(second.status, 404);
+  assert.equal(calls, 2);
+});
+
 test("RazorpayProvider retries transient failures for subscription reads", async () => {
   let calls = 0;
   const provider = new RazorpayProvider("rzp_test", "secret", 1000, 2500, async (_url, init) => {
