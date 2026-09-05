@@ -43,20 +43,21 @@ This is the implementation checklist derived from the supplied engineering-block
 
 - [x] HTTPS service endpoints are used in production.
 - [x] HSTS/security headers are checked in production health tests.
-- [ ] Validate every JSON/query boundary with a schema library or equivalent explicit validator.
+- [x] Gateway query boundaries validate type, range, and length before forwarding.
+- [x] Auth JSON input validates content type, shape, size, and credential structure before verification.
 - [x] Dynamic HTML in the public demo is escaped.
 - [x] Production CORS is explicit rather than wildcard.
 - [ ] Add SSRF defenses before introducing any user-supplied URL fetcher.
 - [x] Session and API credentials are never returned in full after issuance.
 - [x] Billing webhooks require signature verification.
-- [ ] Add explicit brute-force protection to authentication endpoints.
+- [x] Authentication has IP-keyed brute-force throttling.
 - [x] Protected actions check authentication and account state.
 
 ## Reliability
 
 - [x] Provider failures are translated into safe user errors.
-- [x] Razorpay subscription creation has an 8-second provider timeout.
-- [ ] Add shared bounded timeout helpers for all other outbound `fetch` calls.
+- [x] Google signing-key fetches and binding health probes have bounded timeouts.
+- [x] Razorpay subscription creation has an 8-second provider timeout through the billing adapter.
 - [ ] Add retry-with-backoff only to safe/idempotent provider reads and mutations.
 - [ ] Add a small circuit-breaker abstraction for repeatedly failing external dependencies.
 - [x] Provider event IDs are used for webhook deduplication.
@@ -68,7 +69,7 @@ This is the implementation checklist derived from the supplied engineering-block
 
 - [x] Repository activity caching exists in the engine architecture.
 - [x] Result counts are bounded by the authenticated plan.
-- [ ] Enforce explicit per-user and per-IP limits on public gateway endpoints.
+- [ ] Enforce explicit per-user and per-IP limits on every public gateway endpoint.
 - [ ] Add pagination to any future endpoint whose result set can grow without a hard cap.
 - [x] Non-critical refresh work has a background-job architecture in the engine.
 
@@ -77,6 +78,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Public requests carry request IDs.
 - [x] Cloudflare Worker observability is enabled in deployment configuration.
 - [x] Billing binding health is monitored.
+- [x] Auth binding health is monitored.
 - [ ] Standardize structured JSON logging fields across all Workers.
 - [ ] Add centralized exception/error tracking with safe customer messages.
 - [x] Provider event IDs and request IDs are available in the billing incident trail.
@@ -90,7 +92,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Add Playwright browser smoke coverage for the public demo and critical anonymous boundaries.
 - [x] CI/CD deployment exists.
 - [x] Post-deploy production release gate verifies the deployed gateway, bindings, security headers, protected routes, and browser bundle.
-- [x] Production health endpoints exist for the gateway and billing service.
+- [x] Production health endpoints exist for the gateway, billing, and auth services.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
 
 ## Provider abstraction
