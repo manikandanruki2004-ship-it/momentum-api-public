@@ -255,14 +255,15 @@ async function claimSubscription(req: Request, env: Env, id: string) {
   const placeholders = [...planIds].map(() => "?").join(",");
   const sub = await env.DB.prepare(`SELECT * FROM razorpay_unclaimed_subscriptions WHERE is_claimed=0 AND lower(payer_email)=? AND plan_id IN (${placeholders}) ORDER BY COALESCE(last_event_created_at,0) DESC,updated_at DESC LIMIT 1`).bind(email, ...planIds).first<{ subscription_id: string; razorpay_customer_id: string | null; plan_id: string; tier: string; status: string; current_start: number | null; current_end: number | null; last_event_created_at: number | null }>();
   if (!sub) return json({ error: { code: "NO_PENDING_SUBSCRIPTION", message: "No pending Momentum Pro subscription found for this Google account", request_id: id } }, 404, { "x-request-id": id });
-  const updated = await env.DB.prepare("UPDATE razorpay_unclaimed_subscriptions SET is_claimed=1,claimed_customer_id=?,claimed_at=?,updated_at=? WHERE subscription_id=? AND is_claimed=0").bind(customer.id, nowIso(), nowIso(), sub.subscription_id).run();
-  if (updated.meta.changes !== 1) return json({ error: { code: "ALREADY_CLAIMED", message: "Subscription has already been claimed", request_id: id } }, 409, { "x-request-id": id });
   const grant = sub.status === "active";
-  await env.DB.batch([
+  const claimNow = nowIso();
+  const results = await env.DB.batch([
+    env.DB.prepare("UPDATE razorpay_unclaimed_subscriptions SET is_claimed=1,claimed_customer_id=?,claimed_at=?,updated_at=? WHERE subscription_id=? AND is_claimed=0").bind(customer.id, claimNow, claimNow, sub.subscription_id),
     env.DB.prepare("UPDATE razorpay_subscriptions SET is_current=0 WHERE customer_id=? AND is_current=1").bind(customer.id),
-    env.DB.prepare("INSERT INTO razorpay_subscriptions(subscription_id,customer_id,razorpay_customer_id,plan_id,tier,status,current_start,current_end,created_at,updated_at,last_event_created_at,is_current,suspended_at,ended_at,last_event_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(subscription_id) DO UPDATE SET customer_id=excluded.customer_id,is_current=1,tier='pro',status=excluded.status,updated_at=excluded.updated_at,last_event_created_at=excluded.last_event_created_at").bind(sub.subscription_id, customer.id, sub.razorpay_customer_id, sub.plan_id, "pro", sub.status, sub.current_start, sub.current_end, nowIso(), nowIso(), sub.last_event_created_at, 1, null, null, null),
+    env.DB.prepare("INSERT INTO razorpay_subscriptions(subscription_id,customer_id,razorpay_customer_id,plan_id,tier,status,current_start,current_end,created_at,updated_at,last_event_created_at,is_current,suspended_at,ended_at,last_event_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(subscription_id) DO UPDATE SET customer_id=excluded.customer_id,is_current=1,tier='pro',status=excluded.status,updated_at=excluded.updated_at,last_event_created_at=excluded.last_event_created_at,razorpay_customer_id=COALESCE(excluded.razorpay_customer_id,razorpay_subscriptions.razorpay_customer_id),current_start=COALESCE(excluded.current_start,razorpay_subscriptions.current_start),current_end=COALESCE(excluded.current_end,razorpay_subscriptions.current_end)").bind(sub.subscription_id, customer.id, sub.razorpay_customer_id, sub.plan_id, "pro", sub.status, sub.current_start, sub.current_end, claimNow, claimNow, sub.last_event_created_at, 1, null, null, `claim_${crypto.randomUUID()}`),
+    ...(grant ? [env.DB.prepare(`UPDATE customers SET tier='pro',monthly_quota=(SELECT monthly_quota FROM plans WHERE tier='pro' AND active=1),rate_limit_per_minute=(SELECT rate_limit_per_minute FROM plans WHERE tier='pro' AND active=1),active=1 WHERE id=?`).bind(customer.id)] : []),
   ]);
-  if (grant) await syncPro(env, customer.id, true);
+  if ((results[0]?.meta.changes ?? 0) !== 1) return json({ error: { code: "ALREADY_CLAIMED", message: "Subscription has already been claimed", request_id: id } }, 409, { "x-request-id": id });
   return json({ status: grant ? "activated" : "linked", customer_id: customer.id, subscription_id: sub.subscription_id, tier: "pro", active: grant }, 200, { "x-request-id": id });
 }
 
