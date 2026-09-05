@@ -1,6 +1,20 @@
 # Momentum API
 
-Momentum is an API that ranks GitHub repositories by momentum signals: recent developer activity, repository recency, community size, popularity, and — once enough history exists — recent star growth.
+Momentum ranks GitHub repositories by momentum signals such as recent developer activity, repository recency, community size, popularity, and — once enough history exists — recent star growth.
+
+## Product flow
+
+```text
+Google sign-in
+    -> bounded live scan
+    -> Razorpay Pro checkout
+    -> authorization
+    -> verified webhook
+    -> Pro entitlement
+    -> account reflects Pro
+```
+
+The public experience is deliberately thin: the browser renders the interface and calls the public gateway; domain state stays behind dedicated Workers.
 
 ## Production API
 
@@ -12,90 +26,70 @@ https://momentum-api-public.manikandanruki2004.workers.dev
 
 ## Customer accounts
 
-The public customer experience uses **Sign in with Google**. A new Google account automatically receives the Free plan:
+The public customer experience uses **Sign in with Google**. A new Google account receives the Free plan.
 
 | Tier | Requests / month | Rate limit | Max results / request |
 |---|---:|---:|---:|
 | Free | 100 | 10/min | **10** |
 | Pro | 10,000 | 60/min | **25** |
 
-Normal web users do not need to create or paste an API key. Momentum verifies the Google ID token server-side, creates/loads the account, and issues a browser session.
+Normal web users do not need to create or paste an API key. Google identity is verified server-side and the application issues a browser session.
 
 ## Pro billing
 
-Momentum has one public paid plan: **Pro — ₹99/month**.
+**Pro — ₹99/month**.
 
-There is one reusable public Razorpay Subscription Link. Each payer receives their own Razorpay subscription. Momentum activates Pro only after a verified Razorpay webhook for the allow-listed Pro plan.
+Each upgrade creates a customer-specific Razorpay subscription. Momentum returns the provider checkout URL promptly and uses verified Razorpay webhook events as the authority for entitlement changes. Local billing records reconcile provider customer IDs and subscription state without trusting a browser redirect as proof of payment.
 
-The billing service records the Razorpay payer email and automatically matches it to the unique verified Google email on the Momentum account. Normal users do not enter a subscription ID or API key to upgrade.
-
-See [`docs/RAZORPAY_BILLING.md`](docs/RAZORPAY_BILLING.md) for the complete lifecycle and security model.
-
-## Developer API authentication
-
-Developer integrations can still use API keys with `X-API-Key` or `Authorization: Bearer`.
-
-```bash
-curl "https://momentum-api-public.manikandanruki2004.workers.dev/v1/momentum?language=python&min_stars=100&limit=25" \
-  -H "X-API-Key: mk_live_..."
-```
-
-API keys are developer credentials. Never commit them to Git or expose them in public frontend source.
-
-## Account endpoints
-
-```http
-POST /auth/google
-GET  /auth/config
-GET  /auth/me
-POST /auth/logout
-GET  /v1/me
-```
-
-`/auth/google` accepts the Google Identity Services `credential`. `/auth/me` returns the signed-in customer's account and current plan.
-
-## Momentum endpoint
-
-```http
-GET /v1/momentum
-```
-
-Parameters:
-
-| Parameter | Type | Default | Range | Description |
-|---|---|---:|---:|---|
-| `language` | string | empty | — | Optional GitHub language filter |
-| `min_stars` | integer | `100` | `0..1000000` | Minimum repository star count |
-| `max_age_days` | integer | `3650` | `1..36500` | Maximum repository age filter |
-| `limit` | integer | `5` | `1..20` | Requested result count; plan caps still apply |
-
-The server always applies the authenticated plan's effective result limit.
+See [`docs/RAZORPAY_BILLING.md`](docs/RAZORPAY_BILLING.md) for the billing lifecycle.
 
 ## Architecture
 
 ```text
-Browser / Developer
-        |
-        v
-momentum-api-public
-PUBLIC Cloudflare Worker gateway
-   |          |             |
-   |          |             +--> momentum-auth
-   |          +----------------> momentum-billing
-   +---------------------------> momentum-engine
-                                      |
-                                      +--> GitHub API
-                                      +--> Cloudflare D1
-                                      +--> Cloudflare KV
-
-Background every 6 hours
-   |
-   +--> GitHub activity
-   +--> D1 star snapshots
-   +--> D1 activity cache
+Browser / SDK
+      |
+      v
++---------------------------+
+| momentum-api-public       |
+| public Cloudflare gateway |
++---------------------------+
+    |         |         |
+    v         v         v
+  engine    billing    auth
+    |         |         |
+ GitHub     Razorpay   Google
+    |         |         |
+    +---------+---------+
+              |
+             D1 / KV
 ```
 
-The public gateway contains no GitHub credentials, scoring implementation, or customer database logic. The private engine remains the source of truth for quotas, rate limits, and result caps.
+The public gateway owns routing, request IDs, CORS policy, safe error translation, and service-binding health. It does not own ranking, billing state, or authentication business logic.
+
+The private engine remains the source of truth for quotas, rate limits, result caps, repository ranking, GitHub access, caching, and background refresh work.
+
+## Engineering model
+
+Momentum follows a plan-first, modular, secure, observable shipping model based on the supplied **Vibe Engineering Blocks** reference:
+
+- plan the approach, data, and edge cases before coding;
+- keep the first useful slice small;
+- keep UI, logic, data, and provider integrations separated;
+- version migrations and protect multi-step writes;
+- validate input at boundaries and keep secrets out of source and logs;
+- use HTTPS, explicit authorization, rate limiting, timeouts, safe retries, and calm error handling;
+- cache repeated work and move slow work to background jobs;
+- use structured logs, request IDs, error tracking, tests, CI/CD, and browser verification;
+- keep external providers behind adapters so they can be replaced later;
+- maintain durable AI rules in `CLAUDE.md` and reusable procedures in `skills/`.
+
+Project documents:
+
+- [`CLAUDE.md`](CLAUDE.md) — durable AI/build rules
+- [`docs/PLAN-V2.md`](docs/PLAN-V2.md) — plan-first delivery plan
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system architecture and invariants
+- [`docs/ENGINEERING-CHECKLIST.md`](docs/ENGINEERING-CHECKLIST.md) — implementation gates and remaining work
+- [`skills/secure-saas-build/SKILL.md`](skills/secure-saas-build/SKILL.md) — reusable secure SaaS build procedure
 
 ## Interactive demo
 
@@ -103,30 +97,62 @@ The public gateway contains no GitHub credentials, scoring implementation, or cu
 https://therandomhuman-hub.github.io/momentum-api-public/
 ```
 
-The demo uses Google sign-in for live queries. Public source code contains no production API key.
+The demo provides an immediate sample preview, then uses Google sign-in for live queries. It contains no production API key.
 
-## Billing webhook
+## API authentication
 
-```text
-POST /webhooks/razorpay
+Developer integrations can use API keys with `X-API-Key` or `Authorization: Bearer`.
+
+```bash
+curl "https://momentum-api-public.manikandanruki2004.workers.dev/v1/momentum?language=python&min_stars=100&limit=25" \
+  -H "X-API-Key: mk_live_..."
 ```
 
-Razorpay signatures are verified over the exact raw webhook body. Webhook processing is idempotent using `x-razorpay-event-id`. Terminal subscription events remove the paid entitlement.
+API credentials must never be committed to Git or exposed in browser source.
 
-## Data freshness
+## Core endpoints
 
-The engine stores repository snapshots for historical comparisons and maintains a short-lived activity cache. Live requests fall back to GitHub commit counting when cached activity is unavailable.
+```http
+POST /auth/google
+GET  /auth/config
+GET  /auth/me
+POST /auth/logout
+GET  /v1/me
+GET  /v1/momentum
+POST /billing/checkout
+POST /billing/claim
+POST /webhooks/razorpay
+GET  /billing/health
+```
 
-Commit activity is bounded at 500 commits per repository to limit upstream usage.
+## Momentum query parameters
+
+| Parameter | Type | Default | Range |
+|---|---|---:|---:|
+| `language` | string | empty | — |
+| `min_stars` | integer | `100` | `0..1000000` |
+| `max_age_days` | integer | `3650` | `1..36500` |
+| `limit` | integer | `5` | `1..20` |
+
+The server applies the effective limit of the authenticated plan.
+
+## Reliability and verification
+
+Production deployment is expected to follow:
+
+```text
+git push
+  -> validate
+  -> typecheck / tests
+  -> deploy services
+  -> exercise real service bindings
+  -> verify live critical flows
+```
+
+A green compile is not sufficient for a browser-facing change. The critical upgrade flow must be tested in a real browser, including navigation to the hosted Razorpay checkout and post-webhook account state.
 
 ## Security
 
-- Google ID tokens are verified server-side.
-- Google `sub` is the durable Google identity key.
-- Verified Google email is stored only as the account identity needed for billing association.
-- Developer API keys are stored as HMAC-derived hashes.
-- Razorpay webhooks are signature-verified before billing state changes.
-- Only the configured Razorpay Pro plan ID can grant Pro.
-- Secrets remain in Cloudflare/GitHub Actions secrets and are not committed to this repository.
+Google ID tokens are verified server-side. Google `sub` is the durable identity key. Developer API keys are stored as HMAC-derived hashes. Razorpay webhooks are signature-verified from the raw request body and deduplicated using the provider event ID. Only the configured Pro plan may grant paid entitlement. Secrets remain in Cloudflare/GitHub Actions secret storage and are not committed to this repository.
 
-Report vulnerabilities privately using `SECURITY.md`. Never open a public issue containing credentials or security-sensitive details.
+Report vulnerabilities privately using `SECURITY.md` and never publish credentials or sensitive security details in an issue.
