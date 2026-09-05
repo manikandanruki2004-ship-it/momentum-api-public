@@ -19,9 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-
-          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 \
-            -D /tmp/headers.txt "$BASE/health" -o /tmp/health.json
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 -D /tmp/headers.txt "$BASE/health" -o /tmp/health.json
           jq -e '.status == "ok" and .service == "momentum-api-public" and .billing == "service-binding" and .auth == "service-binding" and .engine == "service-binding"' /tmp/health.json >/dev/null
           grep -qi '^strict-transport-security:' /tmp/headers.txt
           grep -qi '^x-content-type-options:' /tmp/headers.txt
@@ -40,8 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-          STATUS="$(curl --silent --show-error --output /tmp/billing.json --write-out '%{http_code}' \
-            --retry 5 --retry-delay 2 "$BASE/billing/health")"
+          STATUS="$(curl --silent --show-error --output /tmp/billing.json --write-out '%{http_code}' --retry 5 --retry-delay 2 "$BASE/billing/health")"
           test "$STATUS" = "200"
           jq -e '.status == "ok" and .service == "momentum-billing"' /tmp/billing.json >/dev/null
 
@@ -50,8 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-          STATUS="$(curl --silent --show-error --output /tmp/auth-health.json --write-out '%{http_code}' \
-            --retry 5 --retry-delay 2 "$BASE/auth/health")"
+          STATUS="$(curl --silent --show-error --output /tmp/auth-health.json --write-out '%{http_code}' --retry 5 --retry-delay 2 "$BASE/auth/health")"
           test "$STATUS" = "200"
           jq -e '.status == "ok" and .service == "momentum-auth"' /tmp/auth-health.json >/dev/null
 
@@ -60,13 +56,15 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://momentum-api-public.manikandanruki2004.workers.dev"
-          STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' \
-            --retry 5 --retry-delay 2 "$BASE/auth/me")"
+          STATUS="$(curl --silent --show-error --output /tmp/me.json --write-out '%{http_code}' --retry 5 --retry-delay 2 "$BASE/auth/me")"
           test "$STATUS" = "401"
           jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
 
-          STATUS="$(curl --silent --show-error --output /tmp/live.json --write-out '%{http_code}' \
-            --retry 5 --retry-delay 2 "$BASE/v1/momentum")"
+          STATUS="$(curl --silent --show-error --output /tmp/status.json --write-out '%{http_code}' --retry 5 --retry-delay 2 "$BASE/billing/status")"
+          test "$STATUS" = "401"
+          jq -e '.error.code == "UNAUTHORIZED"' /tmp/status.json >/dev/null
+
+          STATUS="$(curl --silent --show-error --output /tmp/live.json --write-out '%{http_code}' --retry 5 --retry-delay 2 "$BASE/v1/momentum")"
           test "$STATUS" = "401"
           jq -e '.error.code == "UNAUTHORIZED"' /tmp/live.json >/dev/null
 
