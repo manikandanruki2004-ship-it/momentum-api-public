@@ -11,7 +11,6 @@ This is the implementation checklist derived from the supplied engineering-block
 
 ## Project hygiene
 
-- [x] GitHub is the source-control and deployment history.
 - [ ] Add lockfiles for each independently installed Node project and move CI from `npm install` to `npm ci`.
 - [x] Runtime configuration is kept outside source where supported by the platform.
 - [x] Provider secrets stay in platform/GitHub secret stores.
@@ -74,7 +73,8 @@ This is the implementation checklist derived from the supplied engineering-block
 
 - [x] Repository activity caching exists in the engine architecture.
 - [x] Result counts are bounded by the authenticated plan.
-- [ ] Enforce explicit per-user and per-IP limits on every public gateway endpoint.
+- [x] Gateway applies explicit edge rate limits per client IP and route; account/user-specific limits remain enforced by the authenticated services.
+- [ ] Add stronger per-user limits at the public gateway once authentication identity is available before routing.
 - [ ] Add pagination to any future endpoint whose result set can grow without a hard cap.
 - [x] Non-critical refresh work has a background-job architecture in the engine.
 
@@ -87,6 +87,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [ ] Standardize structured JSON logging fields across all Workers.
 - [ ] Add centralized exception/error tracking with safe customer messages.
 - [x] Provider event IDs and request IDs are available in the billing incident trail.
+- [x] Gateway rate-limit rejections are logged with route, scope, and request ID.
 
 ## Quality and shipping
 
@@ -101,6 +102,7 @@ This is the implementation checklist derived from the supplied engineering-block
 - [x] Production health endpoints exist for the gateway, billing, and auth services.
 - [x] A scheduled production smoke test fails when billing or auth is unavailable.
 - [x] Release contract validates the billing status route and gateway routing.
+- [x] CI validates the presence of the gateway rate-limit contract.
 
 ## Provider abstraction
 
