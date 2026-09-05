@@ -29,6 +29,16 @@ const versionContract = gateway.match(/\{name:\"Momentum API\",version:\"([^\"]+
 if (!versionContract) throw new Error("Gateway version contract is missing");
 const [, apiVersion, engineVersion, billingVersion, authVersion] = versionContract;
 
+const openapiVersionBlock = openapi.match(/\n  \/version:\n[\s\S]*?(?=\n  \/v1\/)/)?.[0] ?? "";
+const versionResponse = openapi.match(/\n    VersionResponse:\n[\s\S]*?(?=\n  responses:)/)?.[0] ?? "";
+const openapiContractMatches =
+  openapi.includes(`  version: ${apiVersion}`) &&
+  versionResponse.includes(`example: ${apiVersion}`) &&
+  versionResponse.includes(`example: ${engineVersion}`) &&
+  versionResponse.includes(`example: ${billingVersion}`) &&
+  versionResponse.includes(`example: ${authVersion}`) &&
+  openapiVersionBlock.includes("$ref: '#/components/schemas/VersionResponse'");
+
 const assertions = [
   [index.includes("window.location.href=u.href"), "checkout must navigate directly to the validated Razorpay URL"],
   [index.includes("https://momentum-api-public.manikandanruki2004.workers.dev"), "demo must target the production gateway"],
@@ -43,7 +53,7 @@ const assertions = [
   [billing.includes("/billing/status") && billing.includes("provider.getSubscription(sid)"), "authenticated billing status reconciliation missing"],
   [gateway.includes("/billing/status") && gateway.includes("isBillingStatus") && gateway.includes("binding=env.BILLING"), "gateway must route billing status to the billing service"],
   [openapi.includes("  /billing/status:"), "OpenAPI must document billing status"],
-  [openapi.includes(`version: ${apiVersion}`) && openapi.includes(`engine: ${engineVersion}`) && openapi.includes(`billing: ${billingVersion}`) && openapi.includes(`auth: ${authVersion}`), "OpenAPI version contract must match the gateway contract"],
+  [openapiContractMatches, "OpenAPI version contract must match the gateway contract"],
 ];
 
 for (const [ok, message] of assertions) {
