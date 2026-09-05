@@ -64,6 +64,20 @@ test("RazorpayProvider retries transient failures for subscription reads", async
   assert.equal(calls, 3);
 });
 
+test("RazorpayProvider retries rate-limited subscription reads", async () => {
+  let calls = 0;
+  const provider = new RazorpayProvider("rzp_test", "secret", 1000, async (_url, init) => {
+    assert.equal(init?.method, "GET");
+    calls += 1;
+    return new Response(JSON.stringify({ error: { code: "RATE_LIMIT" } }), { status: 429 });
+  });
+
+  const result = await provider.getSubscription("sub_test");
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 429);
+  assert.equal(calls, 3);
+});
+
 test("RazorpayProvider does not retry non-retryable billing failures", async () => {
   let calls = 0;
   const provider = new RazorpayProvider("rzp_test", "secret", 1000, async () => {
