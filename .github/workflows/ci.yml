@@ -50,6 +50,9 @@ jobs:
       - name: Validate engineering contract
         run: node tools/validate-engineering.mjs
 
+      - name: Validate billing architecture
+        run: node tools/validate-billing-design.mjs
+
       - name: Install gateway dependencies
         working-directory: worker
         run: npm install --no-audit --no-fund
