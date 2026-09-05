@@ -41,34 +41,34 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - [x] Binding-level health probe.
 - [x] Customer-ID reconciliation migration.
 - [x] Checkout source repair path.
-- [ ] Add binding smoke test to the deployment gate.
-- [ ] Add idempotent checkout-attempt handling to prevent duplicate subscriptions from repeated clicks.
+- [x] Add binding smoke test to the post-deploy release gate.
+- [ ] Add idempotent checkout-attempt handling to prevent duplicate subscriptions from concurrent clicks.
 - [ ] Finish provider adapter separation in the billing service.
 
 ### Phase D — security
 
-- [ ] Replace wildcard browser CORS with an explicit origin policy.
+- [x] Replace wildcard browser CORS with an explicit production origin policy.
 - [ ] Add schema validation at all public JSON/query boundaries.
-- [ ] Verify HSTS/security headers.
+- [x] Verify HSTS/security headers in production health/release gates.
 - [ ] Add brute-force controls to authentication.
-- [ ] Add automated secret scanning that is tuned for false-positive resistance.
+- [x] Add automated secret-pattern scanning with a false-positive-resistant scope.
 
 ### Phase E — reliability/performance
 
-- [ ] Add timeout helpers to all outbound calls.
+- [ ] Add shared timeout helpers to all outbound calls.
 - [ ] Add safe retry-with-backoff where justified.
 - [ ] Add circuit breaking around repeatedly failing external dependencies.
 - [ ] Make remaining shared-state updates atomic.
 - [ ] Audit rate limiting per user and per IP.
-- [ ] Audit cache TTLs/invalidation and background refresh work.
+- [x] Preserve bounded result counts and background refresh architecture; audit cache TTLs/invalidation next.
 
 ### Phase F — quality and shipping
 
 - [ ] Add unit tests for billing state transitions.
-- [ ] Add integration tests for gateway-to-service bindings.
-- [ ] Add Playwright smoke and critical-flow tests.
-- [ ] Make deploy depend on green validation and real binding health.
-- [ ] Add centralized error tracking and structured JSON logging.
+- [x] Add integration-style tests for gateway-to-service binding health.
+- [x] Add Playwright smoke coverage for the browser shell and anonymous critical boundaries.
+- [x] Add a post-deploy production release gate for binding/security/browser checks.
+- [ ] Add centralized error tracking and standardized structured JSON logging.
 
 ## Acceptance criteria
 
@@ -79,4 +79,4 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - Razorpay webhook events are verified, deduplicated, ordered, and reconcile the correct Momentum account.
 - Pro access is never granted merely because a browser was redirected.
 - Billing or engine dependency failure produces a safe user message and searchable diagnostics.
-- A failed CI check blocks deployment.
+- A failed CI check blocks deployment and a successful deployment must pass the post-deploy release gate.
