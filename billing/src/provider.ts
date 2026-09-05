@@ -29,6 +29,45 @@ export interface BillingProvider {
   getSubscription(subscriptionId: string): Promise<ProviderResult>;
 }
 
+type CircuitState = {
+  failures: number;
+  openUntil: number;
+  halfOpen: boolean;
+};
+
+const READ_FAILURE_THRESHOLD = 3;
+const READ_OPEN_MS = 5000;
+const readCircuit: CircuitState = { failures: 0, openUntil: 0, halfOpen: false };
+
+function circuitOpen() {
+  const now = Date.now();
+  if (readCircuit.openUntil <= now) {
+    if (readCircuit.openUntil !== 0) {
+      readCircuit.openUntil = 0;
+      readCircuit.halfOpen = true;
+    }
+    return false;
+  }
+  return !readCircuit.halfOpen;
+}
+
+function circuitPermit() {
+  if (!circuitOpen()) return true;
+  return false;
+}
+
+function circuitSuccess() {
+  readCircuit.failures = 0;
+  readCircuit.openUntil = 0;
+  readCircuit.halfOpen = false;
+}
+
+function circuitFailure() {
+  readCircuit.failures += 1;
+  readCircuit.halfOpen = false;
+  if (readCircuit.failures >= READ_FAILURE_THRESHOLD) readCircuit.openUntil = Date.now() + READ_OPEN_MS;
+}
+
 export class RazorpayProvider implements BillingProvider {
   constructor(
     private readonly keyId: string,
@@ -39,41 +78,52 @@ export class RazorpayProvider implements BillingProvider {
   ) {}
 
   private async request(url: string, init: RequestInit, retryableRead = false): Promise<ProviderResult> {
+    if (retryableRead && !circuitPermit()) return { ok: false, status: 503, data: { error: { code: "PROVIDER_CIRCUIT_OPEN" } } };
     const auth = btoa(`${this.keyId}:${this.keySecret}`);
     const maxAttempts = retryableRead ? 3 : 1;
     const attemptTimeoutMs = retryableRead ? this.readTimeoutMs : this.timeoutMs;
     let lastResult: ProviderResult = { ok: false, status: 503, data: { error: { code: "PROVIDER_UNAVAILABLE" } } };
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), attemptTimeoutMs);
-      try {
-        const response = await this.fetchImpl(url, {
-          ...init,
-          headers: {
-            authorization: `Basic ${auth}`,
-            accept: "application/json",
-            "content-type": "application/json",
-            ...(init.headers ?? {}),
-          },
-          signal: controller.signal,
-        });
-        let data: RazorpaySubscriptionResponse = {};
+    try {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), attemptTimeoutMs);
         try {
-          data = await response.json() as RazorpaySubscriptionResponse;
-        } catch {
-          data = {};
+          const response = await this.fetchImpl(url, {
+            ...init,
+            headers: {
+              authorization: `Basic ${auth}`,
+              accept: "application/json",
+              "content-type": "application/json",
+              ...(init.headers ?? {}),
+            },
+            signal: controller.signal,
+          });
+          let data: RazorpaySubscriptionResponse = {};
+          try {
+            data = await response.json() as RazorpaySubscriptionResponse;
+          } catch {
+            data = {};
+          }
+          lastResult = { ok: response.ok, status: response.status, data };
+          if (!retryableRead || response.ok || (response.status !== 429 && response.status < 500) || attempt === maxAttempts - 1) {
+            if (retryableRead && response.ok) circuitSuccess();
+            else if (retryableRead && !response.ok) circuitFailure();
+            return lastResult;
+          }
+        } finally {
+          clearTimeout(timer);
         }
-        lastResult = { ok: response.ok, status: response.status, data };
-        if (!retryableRead || response.ok || (response.status !== 429 && response.status < 500) || attempt === maxAttempts - 1) return lastResult;
-      } finally {
-        clearTimeout(timer);
-      }
 
-      const delayMs = Math.min(400, 100 * 2 ** attempt);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+        const delayMs = Math.min(400, 100 * 2 ** attempt);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    } catch (error) {
+      if (retryableRead) circuitFailure();
+      throw error;
     }
 
+    if (retryableRead) circuitFailure();
     return lastResult;
   }
 
