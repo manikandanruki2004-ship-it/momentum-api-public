@@ -15,7 +15,7 @@ const requiredGatewayPatterns = [
   [/AUTH_IP_RATE_LIMIT/, 'auth IP limiter binding'],
   [/\.limit\(\{key:/, 'RateLimit.limit key usage'],
   [/code:\"RATE_LIMITED\"/, '429 application error code'],
-  [/status,.*429/, 'HTTP 429 response path'],
+  [/\},429,\{/, 'HTTP 429 response path'],
   [/retry-after/, 'Retry-After guidance'],
   [/cf-connecting-ip/, 'Cloudflare client IP source'],
 ];
