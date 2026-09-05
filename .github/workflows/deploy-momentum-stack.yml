@@ -96,7 +96,7 @@ jobs:
           jq -e '.success == true' /tmp/kv-list.json >/dev/null
           KV_ID="$(jq -r --arg title "$KV_TITLE" '.result[] | select(.title == $title) | .id' /tmp/kv-list.json | head -n 1)"
           if [ -z "$KV_ID" ]; then
-            curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" --data "{\"title\":\"${KV_TITLE}\"}" > /tmp/kv-create.json
+            curl --connect-timeout 10 --max-time 30 --fail-with-body --silent --show-error -X POST "${AUTH[@]}" "${AUTH[@]}" "$API/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces" --data "{\"title\":\"${KV_TITLE}\"}" > /tmp/kv-create.json
             jq -e '.success == true' /tmp/kv-create.json >/dev/null
             KV_ID="$(jq -r '.result.id // empty' /tmp/kv-create.json)"
           fi
@@ -123,7 +123,10 @@ jobs:
             0014_free_plan_10_results.sql \
             0015_razorpay_payer_email.sql \
             0016_razorpay_checkout_attempts.sql \
-            0017_auth_rate_limit.sql; do
+            0017_auth_rate_limit.sql \
+            0018_billing_entitlement_sync_triggers.sql \
+            0019_rebuild_billing_entitlement_sync_triggers.sql; do
+            test -f "worker/migrations/$migration"
             cp "worker/migrations/$migration" "_private-engine/worker/migrations/$migration"
           done
       - name: Apply engine D1 migrations
@@ -256,30 +259,33 @@ jobs:
           check_status "$AUTH_HEALTH_STATUS" "200"
           jq -e '.status == "ok" and .service == "momentum-auth"' /tmp/auth-health.json >/dev/null
           echo "== auth credential validation =="
-          AUTH_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/auth.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/auth/google" -H 'Content-Type: application/json' -d '{}')"
-          echo "HTTP $AUTH_STATUS"; cat /tmp/auth.json; echo
+          AUTH_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/auth-check.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{}' "$BASE_URL/auth/google")"
+          echo "HTTP $AUTH_STATUS"; cat /tmp/auth-check.json; echo
           check_status "$AUTH_STATUS" "401"
-          jq -e '.error.code == "INVALID_CREDENTIAL"' /tmp/auth.json >/dev/null
-          echo "== auth session protection =="
-          AUTH_ME_STATUS="$(get_status "$BASE_URL/auth/me" /tmp/auth-me.json)"
-          echo "HTTP $AUTH_ME_STATUS"; cat /tmp/auth-me.json; echo
-          check_status "$AUTH_ME_STATUS" "401"
-          jq -e '.error.code == "UNAUTHORIZED"' /tmp/auth-me.json >/dev/null
-          echo "== account protection =="
-          ME_STATUS="$(get_status "$BASE_URL/v1/me" /tmp/me.json)"
-          echo "HTTP $ME_STATUS"; cat /tmp/me.json; echo
-          check_status "$ME_STATUS" "401"
-          jq -e '.error.code == "UNAUTHORIZED"' /tmp/me.json >/dev/null
+          jq -e '.error.code == "INVALID_CREDENTIAL" and (.request_id | startswith("req_"))' /tmp/auth-check.json >/dev/null
+          echo "== protected billing boundary =="
+          BILLING_STATUS="$(get_status "$BASE_URL/billing/status" /tmp/billing-status.json)"
+          echo "HTTP $BILLING_STATUS"; cat /tmp/billing-status.json; echo
+          check_status "$BILLING_STATUS" "401"
+          jq -e '(.error.code == "UNAUTHORIZED" or .error.code == "SERVICE_UNAVAILABLE") and (.request_id | startswith("req_"))' /tmp/billing-status.json >/dev/null
+          echo "== invalid query validation =="
+          QUERY_STATUS="$(get_status "$BASE_URL/rankings?limit=0" /tmp/query-check.json)"
+          echo "HTTP $QUERY_STATUS"; cat /tmp/query-check.json; echo
+          check_status "$QUERY_STATUS" "400"
+          jq -e '.error.code == "INVALID_LIMIT" and (.request_id | startswith("req_"))' /tmp/query-check.json >/dev/null
+          echo "== method boundary =="
+          METHOD_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/method-check.json --write-out '%{http_code}' -X DELETE "$BASE_URL/health")"
+          echo "HTTP $METHOD_STATUS"; cat /tmp/method-check.json; echo
+          check_status "$METHOD_STATUS" "405"
+          jq -e '.error.code == "METHOD_NOT_ALLOWED" and (.request_id | startswith("req_"))' /tmp/method-check.json >/dev/null
           echo "== webhook boundary =="
-          BILLING_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/razorpay.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/webhooks/razorpay" -H 'Content-Type: application/json' -d '{}')"
-          echo "HTTP $BILLING_STATUS"; cat /tmp/razorpay.json; echo
-          test "$BILLING_STATUS" = "401" -o "$BILLING_STATUS" = "503" || { echo "Unexpected webhook status"; exit 1; }
-          echo "== claim boundary =="
-          CLAIM_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/claim.json --write-out '%{http_code}' --retry 5 --retry-delay 3 -X POST "$BASE_URL/billing/claim" -H 'Content-Type: application/json' -d '{}')"
-          echo "HTTP $CLAIM_STATUS"; cat /tmp/claim.json; echo
-          test "$CLAIM_STATUS" = "401" -o "$CLAIM_STATUS" = "503" || { echo "Unexpected claim status"; exit 1; }
+          WEBHOOK_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/webhook-check.json --write-out '%{http_code}' -X POST -H 'content-type: application/json' --data '{}' "$BASE_URL/billing/webhook")"
+          echo "HTTP $WEBHOOK_STATUS"; cat /tmp/webhook-check.json; echo
+          check_status "$WEBHOOK_STATUS" "401"
+          jq -e '(.error.code == "UNAUTHORIZED" or .error.code == "WEBHOOK_SECRET_MISSING") and (.request_id | startswith("req_"))' /tmp/webhook-check.json >/dev/null
           echo "== checkout redirect =="
-          CHECKOUT_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/checkout.html --write-out '%{http_code}' --max-redirs 0 --retry 5 --retry-delay 3 "$BASE_URL/billing/checkout")"
-          echo "HTTP $CHECKOUT_STATUS"; cat /tmp/checkout.html; echo
+          CHECKOUT_STATUS="$(curl --connect-timeout 10 --max-time 30 --silent --show-error --output /tmp/checkout-check.html --write-out '%{http_code}' -I "$BASE_URL/billing/checkout")"
+          echo "HTTP $CHECKOUT_STATUS"; cat /tmp/checkout-check.html; echo
           check_status "$CHECKOUT_STATUS" "302"
-          echo "Public Momentum stack smoke checks passed."
+          grep -Eiq '^location: https://(rzp\.io|pages\.razorpay\.com)/' /tmp/checkout-check.html
+          grep -Eiq '^cache-control: no-store' /tmp/checkout-check.html
