@@ -23,6 +23,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 11. Ship only after automated checks pass and the real browser path is verified.
 12. Do not automatically retry Razorpay subscription creation because it is a remote mutation; retries are reserved for reads or operations with proven idempotency.
 13. Allow an authenticated customer to refresh provider subscription state, while keeping verified webhooks authoritative for normal entitlement processing.
+14. Keep the public API documentation synchronized with the actual gateway and billing route surface.
 
 ## Delivery phases
 
@@ -40,7 +41,7 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - [x] Separate account, scan, Pro, results, and trust concepts visually.
 - [x] Make errors visible without exposing implementation details.
 - [x] Keep sample data available without authentication so the page is useful immediately.
-- [ ] Add an explicit post-checkout “refresh billing status” browser control.
+- [x] Add an explicit post-checkout “refresh billing status” browser control.
 
 ### Phase C — billing reliability
 
@@ -75,8 +76,10 @@ Turn the current Momentum demo and API stack into a dependable, production-orien
 - [ ] Add unit tests for billing state transitions.
 - [x] Add integration-style tests for gateway-to-service binding health.
 - [x] Add Playwright smoke coverage for the browser shell and critical anonymous boundaries.
+- [x] Add a protected billing-status boundary check to the browser/public API smoke suite.
 - [x] Add a post-deploy production release gate for binding/security/browser checks.
 - [ ] Add centralized error tracking and standardized structured JSON logging.
+- [x] Synchronize public API documentation with the current gateway/billing contract.
 
 ## Acceptance criteria
 
