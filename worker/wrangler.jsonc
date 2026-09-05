@@ -5,6 +5,9 @@
   "compatibility_date": "2026-08-25",
   "workers_dev": true,
   "observability": { "enabled": true },
+  "vars": {
+    "PUBLIC_APP_ORIGIN": "https://therandomhuman-hub.github.io"
+  },
   "services": [
     { "binding": "ENGINE", "service": "momentum-engine" },
     { "binding": "BILLING", "service": "momentum-billing" },
